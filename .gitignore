@@ -1,0 +1,34 @@
+# Package managers
+elpa/
+straight/
+vendor/
+
+# Native/byte compilation
+.user-lisp-autoloads.el
+eln-cache/
+tree-sitter/
+*.elc
+
+# Checker scratch, written beside the file being checked
+flycheck_*.el
+
+# Machine-local private settings
+private.el
+
+# Runtime state written into user-emacs-directory
+auto-save-list/
+transient/
+url/
+agent/
+.agent-shell/
+bookmarks
+bookmarks~
+eww-bookmarks
+history
+places
+projects.eld
+recentf
+recentf.eld
+tramp
+.org-id-locations
+network-security.data
