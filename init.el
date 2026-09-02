@@ -429,10 +429,41 @@ convention."
 
 (use-package org
   :preface
+  (defun rjd/org-capture-preview-p ()
+    "Non-nil in `org-capture\='s template preview buffer.
+`org-capture-fill-template\=' creates that buffer with `generate-new-buffer\=',
+which uniquifies, so \"*Capture*\" is matched as a prefix rather than compared.
+The buffer is internal and visits no file.  The buffer a capture is actually
+typed into is a separate indirect buffer named CAPTURE-<file>, which this
+deliberately does not match."
+    (string-prefix-p "*Capture*" (buffer-name)))
+
   (defun rjd/org-mode-setup ()
-    "Enable variable-pitch and visual-line modes for org buffers."
-    (variable-pitch-mode 1)
+    "Enable variable-pitch and visual-line modes for org buffers.
+`org-capture\='s preview buffer is left monospaced -- see
+`rjd/org-plain-capture-preview\=' for what that buffer is and why it reads
+better without proportional text.  The exclusion is here, rather than a
+`variable-pitch-mode\=' off switch in that function, because `add-hook\='
+prepends: the preview hook runs first, so anything it turned off would be
+turned straight back on by this function."
+    (unless (rjd/org-capture-preview-p)
+      (variable-pitch-mode 1))
     (visual-line-mode 1))
+
+  (defun rjd/org-plain-capture-preview ()
+    "Turn off sub/superscript prettification in `org-capture\='s preview buffer.
+`org-capture-fill-template\=' expands the template in a *visible* buffer, so a
+template blocked on a `%^{...}\=' prompt sits on screen with the placeholder
+still literal -- the placeholder is deleted before the prompt is issued, not
+after it is answered.  To org that placeholder is a superscript: `%\=' is the
+base and `^{...}\=' the script, so `org-raise-scripts\=' shrinks the rest of it
+to 0.7 and raises it.  The result reads as a font or theme fault rather than
+as a prompt waiting to be answered, which is the only reason this exists --
+the text is correct and disappears as soon as the prompt is answered.
+
+Scoped to the preview by `rjd/org-capture-preview-p\='."
+    (when (rjd/org-capture-preview-p)
+      (setq-local org-pretty-entities nil)))
 
   (defun rjd/org-fix-blank-lines (&optional subtree)
     "Normalize the blank lines before Org headings to exactly one.
@@ -495,6 +526,7 @@ traversing corrupts its iteration."
      ("CANCELLED" . shadow)))
   :config
   (add-hook 'org-mode-hook #'rjd/org-mode-setup)
+  (add-hook 'org-mode-hook #'rjd/org-plain-capture-preview)
   ;; Restores the "<el TAB" structure-template expansion that org moved out
   ;; of core after 9.1; entries in `org-structure-template-alist' become
   ;; tempo shortcuts again.
