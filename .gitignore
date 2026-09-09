@@ -14,6 +14,7 @@ flycheck_*.el
 
 # Machine-local private settings
 private.el
+.claude/settings.local.json
 
 # Runtime state written into user-emacs-directory
 auto-save-list/
@@ -23,6 +24,8 @@ agent/
 .agent-shell/
 bookmarks
 bookmarks~
+bookmarks.eld
+bookmarks.eld~
 eww-bookmarks
 history
 places
