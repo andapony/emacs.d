@@ -1043,6 +1043,10 @@ Plain `elfeed' goes through `elfeed-db-ensure', which does nothing when a
 database is already in memory -- so on its own it would not pick up
 whatever another machine has synced in since."
     (interactive)
+    ;; `elfeed-db-load' has no autoload cookie, and this command is defined
+    ;; in `:preface' rather than pulled in by one, so nothing has loaded
+    ;; elfeed-db by the time the key is first pressed.
+    (require 'elfeed)
     (elfeed-db-load)
     (elfeed)
     (elfeed-search-update :force))
