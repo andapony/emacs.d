@@ -1090,26 +1090,6 @@ whatever another machine has synced in since."
 (use-package agent-shell
   :ensure t                     ; MELPA; pulls acp.el and shell-maker
   :preface
-  ;; ── Chat label overlays ──────────────────────────────────────────
-  ;; The label overlays take their `category' from the *face* symbol that
-  ;; styles them, and an overlay inherits any property it lacks from that
-  ;; symbol's plist.  A face's internal ID lives on that same plist under
-  ;; `face' -- that is what `face-id' reads -- so redisplay finds an integer
-  ;; where a face reference belongs, and logs "Invalid face reference: N"
-  ;; every time it merges faces over that character.  The label's styling
-  ;; is carried by the overlay's `before-string', so shadowing the
-  ;; inherited value with an explicit nil costs nothing.
-  ;;
-  ;; Keyed on the value being a number rather than on a category name, so
-  ;; it covers the agent label as well as "Me".  Advice on a private
-  ;; function again, and it fails as quietly as the two modes above: a
-  ;; rename upstream brings the messages back rather than raising anything.
-  (defun rjd/agent-shell-chat-clear-overlay-face (overlay)
-    "Shadow OVERLAY's category-inherited numeric `face'."
-    (when (numberp (overlay-get overlay 'face))
-      (overlay-put overlay 'face nil))
-    overlay)
-
   ;; ── Stray filename completion ────────────────────────────
   ;; shell-maker derives this mode from `comint-mode', which completes any
   ;; word at point as a filename under `default-directory' -- so typing
@@ -1185,9 +1165,6 @@ whatever another machine has synced in since."
   ;; means the adapter has published a release carrying a newer Claude
   ;; Code, i.e. rebuilding the container would now get you something.
   (rjd/agent-shell-version-mode 1)
-
-  (advice-add 'agent-shell-chat--upsert-overlay :filter-return
-              #'rjd/agent-shell-chat-clear-overlay-face)
 
   (add-hook 'agent-shell-mode-hook #'rjd/agent-shell-drop-comint-completion)
 
