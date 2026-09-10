@@ -715,8 +715,41 @@ traversing corrupts its iteration."
 
 ;; Marginalia annotates the completion metadata rather than the UI, so it
 ;; is not tied to vertico and keeps working against "*Completions*".
+;;
+;; The default `left' alignment starts every annotation at the width of
+;; the widest candidate in the list, a high-water mark that only ever
+;; grows.  Vertico only ever annotates the dozen rows on screen, so that
+;; mark stays small; "*Completions*" is handed the whole list at once, so
+;; for M-x one outlier -- `mouse-drag-bottom-right-corner' and its mouse
+;; binding, 69 columns together -- indents all 3845 commands past the
+;; point where a docstring still fits.
+;;
+;; `center' drops the candidate width from the calculation and pins the
+;; annotation to the window's midpoint instead.  That matches what
+;; marginalia does anyway to `marginalia-field-width', which it caps at
+;; half the window, so the two halves line up: candidate on the left,
+;; docstring filling the right.  The offset is the two-column
+;; `marginalia-separator' plus a column of slack, without which the
+;; annotation ends just past the right edge.  It is declared `natnum'
+;; upstream, but nothing enforces that and a shift left is the only
+;; useful direction here.
+;;
+;; `:demand' because the `:hook' would otherwise defer the form, and
+;; `marginalia-mode' has to be on before the first prompt rather than
+;; after the first completion list.
 (use-package marginalia
   :ensure t
+  :demand t
+  :preface
+  (defun rjd/completions-truncate-lines ()
+    "Truncate rather than wrap in \"*Completions*\".
+A candidate wider than the midpoint pushes its own annotation past
+the right edge; wrapping that costs a whole second line."
+    (setq truncate-lines t))
+  :custom
+  (marginalia-align 'center)
+  (marginalia-align-offset -3)
+  :hook (completion-list-mode . rjd/completions-truncate-lines)
   :config
   (marginalia-mode))
 
