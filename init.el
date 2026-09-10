@@ -164,7 +164,15 @@ everywhere else."
 
 (use-package emacs
   :custom
-  (ispell-program-name "aspell"))
+  (ispell-program-name "aspell")
+  ;; Name the dictionary rather than letting aspell take it from the locale.
+  ;; A GUI Emacs is started by the window server, which sets no LANG, so the
+  ;; language would otherwise depend on how Emacs was launched.
+  (ispell-dictionary "en_US")
+  ;; `--camel-case' splits identifiers and checks each part, which is what
+  ;; makes `flyspell-prog-mode' bearable; it replaced `--run-together', whose
+  ;; suggestions were noise.  `ultra' is aspell's fastest suggestion mode.
+  (ispell-extra-args '("--sug-mode=ultra" "--camel-case")))
 
 (use-package emacs
   :custom
