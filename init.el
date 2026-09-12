@@ -233,6 +233,30 @@ everywhere else."
 
 ;;; Web
 
+;; Maths on a page typeset with KaTeX or MathJax reaches shr twice over,
+;; and by default both copies render badly.
+;;
+;; The visual copy is a pile of absolutely-positioned spans, marked
+;; aria-hidden so that screen readers skip it.  shr renders it anyway
+;; unless told otherwise, and with the positioning gone it arrives in
+;; source order -- denominators before numerators, superscripts inline.
+;;
+;; The other copy is MathML, which `shr-tag-math\=' renders by digging out
+;; the <annotation> child holding the original TeX and printing that
+;; verbatim, backslashes and all.  rjd-shr-math renders the MathML tree
+;; itself instead, flattening it to Unicode: \frac{|A ∪ B|}{LOC} becomes
+;; ∣A ∪ B∣ / LOC.  It needs no LaTeX and produces text, so it works on a
+;; terminal frame.
+;;
+;; Here rather than under `eww\=' because shr is what elfeed and mu4e
+;; render with too, and a feed of the same blog has the same formulas.
+(use-package shr
+  :defer t
+  :custom
+  (shr-discard-aria-hidden t)
+  :config
+  (rjd/shr-math-mode 1))
+
 (use-package eww
   :defer t
   :custom
