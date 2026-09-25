@@ -15,5 +15,12 @@
 ;; the first batch of warnings.
 (setq native-comp-async-report-warnings-errors 'silent)
 
+;; Load whichever of a library's source and compiled file is newer.
+;; Emacs 31 recompiles user-lisp/ at startup, one file at a time, and a
+;; file compiled early loads its dependencies' stale .elc otherwise:
+;; the session then keeps their old definitions until the next restart.
+;; `prepare-user-lisp' runs before init.el, so this has to be here.
+(setq load-prefer-newer t)
+
 (provide 'early-init)
 ;;; early-init.el ends here
