@@ -1130,8 +1130,20 @@ whatever another machine has synced in since."
           :stream t
           :key (lambda ()
                  (auth-source-pick-first-password
-                  :host "api.anthropic.com"))))
-  (setq gptel-model 'claude-sonnet-4-6))
+                  :host "api.anthropic.com"))
+          ;; gptel's own model list predates Opus 5.5 (checked against
+          ;; 20260919).  Drop this entry once an upgrade ships it.
+          :models (cons '(claude-opus-5-5
+                          :description "Opus 5.5"
+                          :capabilities (media tool-use cache)
+                          :mime-types ("image/jpeg" "image/png" "image/gif"
+                                       "image/webp" "application/pdf")
+                          :context-window 1000
+                          :input-cost 4
+                          :output-cost 20
+                          :request-params (:output_config (:effort "medium")))
+                        gptel--anthropic-models)))
+  (setq gptel-model 'claude-opus-5-5))
 
 (use-package agent-shell
   :ensure t                     ; MELPA; pulls acp.el and shell-maker
