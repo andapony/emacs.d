@@ -234,19 +234,33 @@ redisplay path that renders the header."
        (rjd/agent-shell-version--refresh-headers)))))
 
 ;;;###autoload
-(defun rjd/agent-shell-version-check-update ()
-  "Check whether a newer ACP adapter release is available."
-  (interactive)
-  (unless rjd/agent-shell-version--update-in-flight
+(defun rjd/agent-shell-version-check-update (&optional report)
+  "Check whether a newer ACP adapter release is available.
+With REPORT, which is always set interactively, echo the outcome when
+it arrives.  The header shows only a bare indicator, and the graphical
+header cannot carry the tooltip that names the versions, so this is
+where they can be read."
+  (interactive (list t))
+  (if rjd/agent-shell-version--update-in-flight
+      (when report
+        (message "An adapter update check is already running"))
     (setq rjd/agent-shell-version--update-in-flight t)
     (rjd/agent-shell-version--run
      "rjd-agent-shell-version-update"
      rjd/agent-shell-version-update-command
      (lambda (output)
-       (setq rjd/agent-shell-version--update-in-flight nil)
-       (setq rjd/agent-shell-version--update-cache
-             (cons (rjd/agent-shell-version--parse-update output) (current-time)))
-       (rjd/agent-shell-version--refresh-headers)))))
+       (let ((pair (rjd/agent-shell-version--parse-update output)))
+         (setq rjd/agent-shell-version--update-in-flight nil)
+         (setq rjd/agent-shell-version--update-cache (cons pair (current-time)))
+         (rjd/agent-shell-version--refresh-headers)
+         (when report
+           (cond ((null pair)
+                  (message "Could not compare adapter versions; is the npm registry reachable?"))
+                 ((equal (car pair) (cdr pair))
+                  (message "claude-agent-acp %s is the latest release" (car pair)))
+                 (t
+                  (message "claude-agent-acp %s available (installed %s); M-x rjd/agent-shell-version-install-update"
+                           (cdr pair) (car pair))))))))))
 
 (defun rjd/agent-shell-version-update-available-p ()
   "Return the newer adapter version when one exists, else nil.
@@ -271,10 +285,25 @@ container's writable layer, so recreating the container undoes it --
 harmlessly, since a fresh image build installs the latest adapter too.
 
 Shells already open keep the adapter process they started with; only
-shells started afterwards use the new one."
+shells started afterwards use the new one.
+
+Asks first, naming the versions from the last update check.  That check
+can be up to `rjd/agent-shell-version-update-ttl' old, and the install
+takes whatever is latest now, so the version named is a floor."
   (interactive)
   (when rjd/agent-shell-version--install-in-flight
     (user-error "An adapter install is already running"))
+  (let ((pair (car rjd/agent-shell-version--update-cache)))
+    (unless (y-or-n-p
+             (cond ((null pair)
+                    "Latest adapter version unknown; install claude-agent-acp@latest anyway? ")
+                   ((equal (car pair) (cdr pair))
+                    (format "claude-agent-acp %s is already the latest; reinstall? "
+                            (car pair)))
+                   (t
+                    (format "Install claude-agent-acp %s (installed %s)? "
+                            (cdr pair) (car pair)))))
+      (user-error "Adapter install cancelled")))
   (let ((buffer (get-buffer-create "*rjd-agent-shell-version-install*")))
     (with-current-buffer buffer
       (let ((inhibit-read-only t))
