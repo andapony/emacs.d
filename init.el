@@ -471,15 +471,7 @@ deliberately does not match."
     (string-prefix-p "*Capture*" (buffer-name)))
 
   (defun rjd/org-mode-setup ()
-    "Enable variable-pitch and visual-line modes for org buffers.
-`org-capture\='s preview buffer is left monospaced -- see
-`rjd/org-plain-capture-preview\=' for what that buffer is and why it reads
-better without proportional text.  The exclusion is here, rather than a
-`variable-pitch-mode\=' off switch in that function, because `add-hook\='
-prepends: the preview hook runs first, so anything it turned off would be
-turned straight back on by this function."
-    (unless (rjd/org-capture-preview-p)
-      (variable-pitch-mode 1))
+    "Enable visual-line mode for org buffers."
     (visual-line-mode 1))
 
   (defun rjd/org-plain-capture-preview ()
@@ -665,10 +657,7 @@ traversing corrupts its iteration."
 (use-package diminish
   :ensure t
   :config
-  (diminish 'visual-line-mode)
-  ;; `variable-pitch-mode' is a thin wrapper over `buffer-face-mode', so
-  ;; `rjd/org-mode-setup' turns the latter on in every org buffer.
-  (diminish 'buffer-face-mode))
+  (diminish 'visual-line-mode))
 
 ;; Built into Emacs since 30.1, so there is nothing to :ensure -- package.el
 ;; counts it as installed and would never fetch it anyway.  `which-key-mode'
