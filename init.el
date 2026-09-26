@@ -131,7 +131,7 @@
 ;;
 ;; `fixed-pitch' and `variable-pitch' take a :height of 1.0 so they scale
 ;; with `default' rather than pinning an absolute size of their own.
-(defconst rjd/mono-spaced-font "Ubuntu Mono"
+(defconst rjd/mono-spaced-font "Aporetic Sans Mono"
   "Font family for `default' and `fixed-pitch'.")
 
 (defconst rjd/proportionately-spaced-font "Ubuntu"
