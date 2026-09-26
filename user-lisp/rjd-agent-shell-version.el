@@ -25,6 +25,8 @@
 ;; publishes a release bumping its SDK pin.  There is nothing to poll for
 ;; frequently and nothing a restart will change -- the signal is "a
 ;; rebuild would now get you something newer", checked daily.
+;; `rjd/agent-shell-version-install-update' acts on it without the
+;; rebuild, by installing the new adapter into the running container.
 ;;
 ;; Enable with `rjd/agent-shell-version-mode'.
 ;;
@@ -100,8 +102,8 @@ prints the first line and the indicator simply stays hidden."
 (defcustom rjd/agent-shell-version-update-ttl 86400
   "Seconds between checks for a newer ACP adapter release.
 Daily is generous: the answer changes only when the adapter publishes,
-and acting on it means rebuilding a container, which is not something to
-prompt for hourly."
+and acting on it means reinstalling the adapter under running shells,
+which is not something to prompt for hourly."
   :type 'natnum
   :group 'rjd/agent-shell-version)
 
@@ -111,6 +113,17 @@ Deliberately a bare glyph rather than the new version number: what is
 available is an adapter version, which is not the Claude Code version
 sitting next to it, and showing both invites reading one as the other."
   :type 'string
+  :group 'rjd/agent-shell-version)
+
+(defcustom rjd/agent-shell-version-install-command
+  '("sh" "-c"
+    "npm install -g @agentclientprotocol/claude-agent-acp@latest && claude --version")
+  "Command installing the latest ACP adapter where the agent runs.
+Used by `rjd/agent-shell-version-install-update'.  The trailing
+`claude --version' proves the `claude' on PATH still resolves: in the
+container it is a symlink into the adapter's own `node_modules', which
+the install replaces wholesale."
+  :type '(repeat string)
   :group 'rjd/agent-shell-version)
 
 
@@ -129,6 +142,9 @@ sitting next to it, and showing both invites reading one as the other."
   "Non-nil while an adapter update check is outstanding.
 Separate from `rjd/agent-shell-version--in-flight' so the slow,
 network-bound check cannot block the cheap local one behind it.")
+
+(defvar rjd/agent-shell-version--install-in-flight nil
+  "Non-nil while an adapter install is running.")
 
 (defun rjd/agent-shell-version--stale-p (cache ttl)
   "Return non-nil when CACHE was fetched more than TTL seconds ago.
@@ -242,6 +258,69 @@ Kicks off a check when the cached answer has aged out."
               ((not (equal (car pair) (cdr pair)))))
     (cdr pair)))
 
+;;;###autoload
+(defun rjd/agent-shell-version-install-update ()
+  "Install the latest ACP adapter where the agent runs.
+Runs `rjd/agent-shell-version-install-command' through
+`agent-shell-command-prefix', showing its output in a buffer, then
+re-checks the version and the update indicator.
+
+This updates the running container in place rather than recreating it,
+which would kill every open session.  The change lives in the
+container's writable layer, so recreating the container undoes it --
+harmlessly, since a fresh image build installs the latest adapter too.
+
+Shells already open keep the adapter process they started with; only
+shells started afterwards use the new one."
+  (interactive)
+  (when rjd/agent-shell-version--install-in-flight
+    (user-error "An adapter install is already running"))
+  (let ((buffer (get-buffer-create "*rjd-agent-shell-version-install*")))
+    (with-current-buffer buffer
+      (let ((inhibit-read-only t))
+        (erase-buffer))
+      (special-mode))
+    (display-buffer buffer)
+    (setq rjd/agent-shell-version--install-in-flight t)
+    (condition-case err
+        (make-process
+         :name "rjd-agent-shell-version-install"
+         :buffer buffer
+         :command (append (and (boundp 'agent-shell-command-prefix)
+                               agent-shell-command-prefix)
+                          rjd/agent-shell-version-install-command)
+         :noquery t
+         :connection-type 'pipe
+         ;; `special-mode' makes the buffer read-only, so output has to
+         ;; be inserted past that rather than by the default filter.
+         :filter (lambda (process chunk)
+                   (when (buffer-live-p (process-buffer process))
+                     (with-current-buffer (process-buffer process)
+                       (let ((inhibit-read-only t))
+                         (goto-char (point-max))
+                         (insert chunk)))))
+         :sentinel
+         (lambda (process _event)
+           (unless (process-live-p process)
+             (setq rjd/agent-shell-version--install-in-flight nil)
+             (if (not (zerop (process-exit-status process)))
+                 (message "ACP adapter install failed; see %s"
+                          (buffer-name buffer))
+               (rjd/agent-shell-version-refresh)
+               (rjd/agent-shell-version-check-update)
+               (let ((open (seq-count (lambda (b)
+                                        (with-current-buffer b
+                                          (derived-mode-p 'agent-shell-mode)))
+                                      (buffer-list))))
+                 (message "ACP adapter updated%s"
+                          (if (zerop open)
+                              ""
+                            (format "; restart %d open shell%s to use it"
+                                    open (if (= open 1) "" "s")))))))))
+      (error
+       (setq rjd/agent-shell-version--install-in-flight nil)
+       (signal (car err) (cdr err))))))
+
 (defun rjd/agent-shell-version-string ()
   "Return the formatted Claude Code version, or nil if it is not known yet.
 Carries the update indicator when a newer adapter release is available.
@@ -260,7 +339,7 @@ flickering empty while the new one is fetched."
             (when-let* ((latest (rjd/agent-shell-version-update-available-p)))
               (concat " " (propertize rjd/agent-shell-version-update-indicator
                                       'help-echo
-                                      (format "claude-agent-acp %s available; rebuild the container"
+                                      (format "claude-agent-acp %s available; M-x rjd/agent-shell-version-install-update"
                                               latest)))))))
 
 
