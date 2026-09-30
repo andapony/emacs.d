@@ -58,10 +58,11 @@
 ;; identity to send as, calendar endpoints, paths to unpublished work, what
 ;; I read, and the whole configuration of local and git-hosted packages that
 ;; have never been released.  Loaded
-;; after custom.el, so it wins over anything Customize has written.  The
-;; setup repo symlinks it into place; tolerate its absence so that a bare
-;; checkout still loads, which means anything set there must also have a
-;; usable default where it is declared.
+;; after custom.el, so it wins over anything Customize has written.  It
+;; lives in the private dotfiles repo, and the setup repo symlinks it into
+;; place; tolerate its absence so that a bare checkout still loads, which
+;; means anything set there must also have a usable default where it is
+;; declared.
 (load (file-name-concat user-emacs-directory "private.el") :noerror :nomessage)
 
 ;;; Load path

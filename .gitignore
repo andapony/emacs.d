@@ -19,7 +19,7 @@ user-lisp/book-list
 user-lisp/c2log
 user-lisp/org-pa
 
-# Machine-local private settings
+# Private settings: a symlink into the private dotfiles repo, made by setup
 private.el
 .claude/settings.local.json
 

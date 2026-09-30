@@ -23,12 +23,23 @@ its checkout under `~/projects` is symlinked into `user-lisp/`, which
 Emacs follows.  The `setup` repo's `emacs_user_lisp_repos` list clones
 each one and makes its link.  The Book list, org-pa and c2log are linked
 this way, each as `user-lisp/NAME` -> `~/projects/NAME`; each has its
-own `CLAUDE.md`, and their settings stay here, in `private.el`.  Each
-such symlink is gitignored and must tolerate being absent, since it
-dangles on a machine without the checkout, and then the package's
-commands are simply missing.  `early-init.el` adds `test` and `tmp` to
+own `CLAUDE.md`, and their settings stay in `private.el`.  Each such
+symlink is gitignored and must tolerate being absent, since it dangles
+on a machine without the checkout, and then the package's commands are
+simply missing.  `early-init.el` adds `test` and `tmp` to
 `user-lisp-ignored-directories`, so these packages' test suites and
 scratch stay out of the session.
+
+This repository is public, and meant to set up a new machine — a work
+one, say — on its own.  Personal values live in `private.el`, which
+`init.el` loads with `:noerror` after `custom.el`: the mail identity,
+calendar endpoints, paths to unpublished work, and every private
+package's settings.  It is gitignored here because it is a symlink into
+the private `dotfiles` repo, `emacs-private/private.el`, made by the
+`setup` repo's `dotfile_links`.  Edit it there and commit it in
+`dotfiles`; never copy its values into this repository.  Anything set
+there needs a usable default where it is declared, since a machine
+without `dotfiles` has no `private.el` at all.
 
 `vendor/` is added to `load-path` by `init.el` and holds files symlinked
 in by the `setup` repo's `org-sync` role.  It is gitignored, so anything
