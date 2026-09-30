@@ -22,5 +22,13 @@
 ;; `prepare-user-lisp' runs before init.el, so this has to be here.
 (setq load-prefer-newer t)
 
+;; Keep test suites out of every session.  Emacs 31 prepares all of
+;; user-lisp/, following symlinks, so a package linked in there from its
+;; own checkout -- user-lisp/book-list -> ~/projects/book-list -- would
+;; have its test/ compiled, autoloaded and put on `load-path' too.  The
+;; list is matched against each directory's name, and like
+;; `load-prefer-newer' it has to be set before `prepare-user-lisp' runs.
+(add-to-list 'user-lisp-ignored-directories "test")
+
 (provide 'early-init)
 ;;; early-init.el ends here
