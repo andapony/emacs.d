@@ -1176,6 +1176,15 @@ whatever another machine has synced in since."
   (agent-shell-thought-process-expand-by-default t)
   (agent-shell-activity-group-expand-by-default t)
 
+  ;; ── Submitting mid-turn ──────────────────────────────────────────
+  ;; Upstream queues a mid-turn prompt until the turn ends and steers on
+  ;; the override key. Swapped, so a correction reaches the running turn
+  ;; at once; M-RET (or C-u C-c C-c) queues instead. Steering cuts off
+  ;; what the agent is generating, and falls back to queueing for an
+  ;; agent that does not advertise it.
+  (agent-shell-busy-submit-default-function #'agent-shell-busy-submit-steer)
+  (agent-shell-busy-submit-override-function #'agent-shell-busy-submit-queue)
+
   :config
   ;; ── Claude specifics ─────────────────────────────────────────────
   ;; These two resist `:custom', which runs before the package loads:
@@ -1217,9 +1226,14 @@ whatever another machine has synced in since."
   ;; ── Ergonomics (optional, but suited to your complaints) ─────────
   ;; RET inserts a newline; explicit send. Multi-line prompts stop
   ;; being a fight.
+  ;;
+  ;; C-c C-c is `agent-shell-submit', not the `shell-maker-submit' the
+  ;; agent-shell README still suggests: only the former routes a mid-turn
+  ;; prompt through the busy-submit functions above, and waits for the
+  ;; session to be ready rather than swallowing what was typed.
   :bind (:map agent-shell-mode-map
               ("RET"     . newline)
-              ("C-c C-c" . shell-maker-submit)
+              ("C-c C-c" . agent-shell-submit)
               ("C-c C-k" . agent-shell-interrupt)))
 
 ;;; Utilities
