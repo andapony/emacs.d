@@ -22,13 +22,17 @@
 ;; `prepare-user-lisp' runs before init.el, so this has to be here.
 (setq load-prefer-newer t)
 
-;; Keep test suites out of every session.  Emacs 31 prepares all of
-;; user-lisp/, following symlinks, so a package linked in there from its
-;; own checkout -- user-lisp/book-list -> ~/projects/book-list -- would
-;; have its test/ compiled, autoloaded and put on `load-path' too.  The
+;; Keep test suites and scratch out of every session.  Emacs 31 prepares
+;; all of user-lisp/, following symlinks, so a package linked in there
+;; from its own checkout -- user-lisp/book-list -> ~/projects/book-list
+;; -- would have its test/ compiled, autoloaded and put on `load-path'
+;; too.  tmp/ is worse: c2log's holds an old copy of c2log.el, whose
+;; autoload cookies would be scraped alongside the real one's, leaving
+;; which file a command loads to the order they were written in.  The
 ;; list is matched against each directory's name, and like
 ;; `load-prefer-newer' it has to be set before `prepare-user-lisp' runs.
-(add-to-list 'user-lisp-ignored-directories "test")
+(dolist (dir '("test" "tmp"))
+  (add-to-list 'user-lisp-ignored-directories dir))
 
 (provide 'early-init)
 ;;; early-init.el ends here

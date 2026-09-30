@@ -5,7 +5,7 @@
  ;; Your init file should contain only one such instance.
  ;; If there is more than one, they won't work right.
  '(package-selected-packages
-   '(agent-shell c2log consult csv csv-mode denote diminish elfeed
+   '(agent-shell consult csv csv-mode denote diminish elfeed
 		 exec-path-from-shell flycheck flycheck-golangci-lint
 		 flycheck-hledger gptel ledger-mode magit marginalia
 		 mermaid-mode ob-mermaid orderless org-chronicle

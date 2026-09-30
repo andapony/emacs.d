@@ -16,6 +16,8 @@ flycheck_*.el
 # symlinked in, so that Emacs 31 prepares them with the rest of user-lisp/.
 # The setup repo's emacs_user_lisp_repos clones and links each one.
 user-lisp/book-list
+user-lisp/c2log
+user-lisp/org-pa
 
 # Machine-local private settings
 private.el

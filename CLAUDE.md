@@ -21,13 +21,14 @@ commands an autoload cookie rather than adding a `require`.
 A package big enough for its own repository stays loaded the same way:
 its checkout under `~/projects` is symlinked into `user-lisp/`, which
 Emacs follows.  The `setup` repo's `emacs_user_lisp_repos` list clones
-each one and makes its link.  The Book list is one, at
-`user-lisp/book-list` -> `~/projects/book-list`; it has its own
-`CLAUDE.md`, and its settings stay here, in `private.el`.  Each such symlink is gitignored and must
-tolerate being absent, since it dangles on a machine without the
-checkout, and then the package's commands are simply missing.
-`early-init.el` adds `test` to `user-lisp-ignored-directories`, so
-these packages' test suites stay out of the session.
+each one and makes its link.  The Book list, org-pa and c2log are linked
+this way, each as `user-lisp/NAME` -> `~/projects/NAME`; each has its
+own `CLAUDE.md`, and their settings stay here, in `private.el`.  Each
+such symlink is gitignored and must tolerate being absent, since it
+dangles on a machine without the checkout, and then the package's
+commands are simply missing.  `early-init.el` adds `test` and `tmp` to
+`user-lisp-ignored-directories`, so these packages' test suites and
+scratch stay out of the session.
 
 `vendor/` is added to `load-path` by `init.el` and holds files symlinked
 in by the `setup` repo's `org-sync` role.  It is gitignored, so anything
