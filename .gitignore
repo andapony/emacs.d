@@ -13,7 +13,8 @@ tree-sitter/
 flycheck_*.el
 
 # Packages developed in their own checkouts under ~/projects and
-# symlinked in, so that Emacs 31 prepares them with the rest of user-lisp/
+# symlinked in, so that Emacs 31 prepares them with the rest of user-lisp/.
+# The setup repo's emacs_user_lisp_repos clones and links each one.
 user-lisp/book-list
 
 # Machine-local private settings

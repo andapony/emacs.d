@@ -20,9 +20,10 @@ commands an autoload cookie rather than adding a `require`.
 
 A package big enough for its own repository stays loaded the same way:
 its checkout under `~/projects` is symlinked into `user-lisp/`, which
-Emacs follows.  The Book list is one, at `user-lisp/book-list` ->
-`~/projects/book-list`; it has its own `CLAUDE.md`, and its settings
-stay here, in `private.el`.  Each such symlink is gitignored and must
+Emacs follows.  The `setup` repo's `emacs_user_lisp_repos` list clones
+each one and makes its link.  The Book list is one, at
+`user-lisp/book-list` -> `~/projects/book-list`; it has its own
+`CLAUDE.md`, and its settings stay here, in `private.el`.  Each such symlink is gitignored and must
 tolerate being absent, since it dangles on a machine without the
 checkout, and then the package's commands are simply missing.
 `early-init.el` adds `test` to `user-lisp-ignored-directories`, so
