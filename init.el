@@ -830,9 +830,11 @@ the right edge; wrapping that costs a whole second line."
          ("M-g g" . consult-goto-line)
          ("M-g o" . consult-outline))
   :custom
-  ;; Show eglot xref results (go-to-definition, find-references) in a
-  ;; consult interface rather than the default *xref* buffer.
-  (xref-show-xrefs-function #'consult-xref)
+  ;; Choose among several definitions for M-. with consult's filtering and
+  ;; preview, for every xref backend, not only eglot.  Only definitions:
+  ;; `xref-show-xrefs-function' also serves M-?, `project-find-regexp' and
+  ;; dired's `A', whose results are a list to work through -- n/p and
+  ;; `next-error' -- and `consult-xref' keeps only the one you pick.
   (xref-show-definitions-function #'consult-xref)
   :config
   ;; Debounce preview so it doesn't fire on every keystroke while
