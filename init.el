@@ -824,7 +824,10 @@ the right edge; wrapping that costs a whole second line."
 
 (use-package consult
   :ensure t
-  :bind (("M-g g" . consult-goto-line)
+  ;; `consult-buffer' offers recent files and bookmarks alongside the open
+  ;; buffers; `f SPC' or `b SPC' at the prompt narrows to just one kind.
+  :bind (("C-x b" . consult-buffer)
+         ("M-g g" . consult-goto-line)
          ("M-g o" . consult-outline))
   :custom
   ;; Show eglot xref results (go-to-definition, find-references) in a
