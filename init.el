@@ -361,6 +361,21 @@ everywhere else."
     "Return a Go module project for DIR, or nil if none found."
     (when-let* ((root (locate-dominating-file dir "go.mod")))
       (cons 'go-module root)))
+
+  ;; `agent-shell' already starts at the project root, but it decides what
+  ;; to do from the current buffer, which is wrong under C-x p p.  From one
+  ;; project's shell it toggles that shell rather than the chosen
+  ;; project's, and from a file it carries the file over as context.  So
+  ;; resolve the root here -- C-x p p sets its override buffer-locally --
+  ;; and call it from a blank buffer standing in that root.
+  (defun rjd/project-agent-shell (&optional arg)
+    "Start or switch to an agent shell at the current project's root.
+ARG is passed to `agent-shell': \\[universal-argument] forces a new shell."
+    (interactive "P")
+    (let ((root (project-root (project-current t))))
+      (with-temp-buffer
+        (setq default-directory root)
+        (agent-shell arg))))
   :custom
   (project-mode-line t)
   (project-switch-commands
@@ -368,12 +383,14 @@ everywhere else."
      (project-find-regexp "Find regexp")
      (project-find-dir "Find directory")
      (magit-project-status "Magit" 109)
-     (project-shell "Shell" 115)))
+     (project-shell "Shell" 115)
+     (rjd/project-agent-shell "Agent" 97)))
   :bind (:map project-prefix-map
               ;; New in Emacs 31, and the only one of its project additions
               ;; without a default binding.  Jumps to the same file in another
               ;; project, which is what you want across git worktrees.
-              ("m" . project-find-matching-buffer))
+              ("m" . project-find-matching-buffer)
+              ("a" . rjd/project-agent-shell))
   :config
   (cl-defmethod project-root ((project (head go-module)))
     (cdr project))
