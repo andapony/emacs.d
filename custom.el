@@ -10,7 +10,7 @@
 		 flycheck-hledger gptel ledger-mode magit marginalia
 		 mermaid-mode ob-mermaid orderless org-chronicle
 		 org-modern org-reading-list org-web-tools ripgrep
-		 spacious-padding yasnippet)))
+		 spacious-padding vertico yasnippet)))
 
 (custom-set-faces
  ;; custom-set-faces was added by Custom.

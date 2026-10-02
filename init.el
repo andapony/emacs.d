@@ -685,12 +685,20 @@ traversing corrupts its iteration."
   ;; `completion-styles' in precisely the places orderless is most wanted.
   (completion-category-defaults nil))
 
-;; Emacs 31's own minibuffer completion, in place of vertico.  Two new
-;; options do most of what `vertico-mode' did: `completion-eager-display'
-;; puts "*Completions*" on screen as soon as the minibuffer opens rather
-;; than waiting for TAB, and `completion-eager-update' refilters it as you
-;; type.  Both default to `auto', which leaves the choice to the completion
-;; table, so only forcing them on makes every command behave alike.
+;; Vertico for the minibuffer.  Emacs 31's eager "*Completions*" can stand
+;; in for it, but runs the annotation function -- marginalia's -- over every
+;; candidate before showing any, so opening M-x annotated all ~5,000
+;; commands (~0.4s) and C-h f all ~18,000 functions (~1.1s) first.  Vertico
+;; only ever annotates the rows on screen.  It also binds
+;; `completion-eager-display' to nil for each session it runs, so
+;; "*Completions*" never opens alongside it.
+(use-package vertico
+  :ensure t
+  :config
+  (vertico-mode))
+
+;; "*Completions*" still serves in-buffer completion: TAB opens it from the
+;; preview further down, and these settings shape it there.
 ;;
 ;; M-n/M-p here match the `completion-preview-active-mode-map' bindings
 ;; further down, so the same two keys walk the candidates whether they are
@@ -703,67 +711,28 @@ traversing corrupts its iteration."
               ("M-n" . minibuffer-next-completion)
               ("M-p" . minibuffer-previous-completion))
   :custom
-  (completion-eager-display t)
-  ;; The one to back off first.  Refiltering on every keystroke is what
-  ;; makes this feel like vertico, but the manual warns it can slow typing
-  ;; on large or inefficient tables; `auto' restores the table's own say.
+  ;; Refilter an open list as you type, rather than leaving it stale until
+  ;; the next TAB.  This only acts on a list already on screen.
   (completion-eager-update t)
-  ;; UP/DOWN also walk the list while LEFT/RIGHT still move point in what
-  ;; you have typed, and RET takes the selected candidate.  The `up-down'
-  ;; value is new in 31.1 -- plain t gives all four arrows to the list,
-  ;; which makes editing the input awkward.
+  ;; UP/DOWN also walk the list while LEFT/RIGHT still move point, and RET
+  ;; takes the selected candidate.  The `up-down' value is new in 31.1 --
+  ;; plain t gives all four arrows to the list, which makes editing awkward.
   (minibuffer-visible-completions 'up-down)
   ;; Recently chosen candidates first, rather than strict alphabetical.
   (completions-sort 'historical)
   ;; One candidate per line, rather than the default newspaper columns.
-  ;; Also one of the two formats the 31.1 lazy-insertion optimisation
-  ;; applies to, which matters once eager display shows every list.
   (completions-format 'one-column)
   (completions-max-height 15)
-  ;; The "N possible completions:" heading is noise when the buffer is on
-  ;; screen for every prompt.
+  ;; The "N possible completions:" heading is noise.
   (completions-header-format nil)
   ;; Annotate candidates with what they are -- function signatures and the
   ;; first line of a docstring for elisp, LSP detail for eglot's modes.
   (completions-detailed t))
 
-;; Marginalia annotates the completion metadata rather than the UI, so it
-;; is not tied to vertico and keeps working against "*Completions*".
-;;
-;; The default `left' alignment starts every annotation at the width of
-;; the widest candidate in the list, a high-water mark that only ever
-;; grows.  Vertico only ever annotates the dozen rows on screen, so that
-;; mark stays small; "*Completions*" is handed the whole list at once, so
-;; for M-x one outlier -- `mouse-drag-bottom-right-corner' and its mouse
-;; binding, 69 columns together -- indents all 3845 commands past the
-;; point where a docstring still fits.
-;;
-;; `center' drops the candidate width from the calculation and pins the
-;; annotation to the window's midpoint instead.  That matches what
-;; marginalia does anyway to `marginalia-field-width', which it caps at
-;; half the window, so the two halves line up: candidate on the left,
-;; docstring filling the right.  The offset is the two-column
-;; `marginalia-separator' plus a column of slack, without which the
-;; annotation ends just past the right edge.  It is declared `natnum'
-;; upstream, but nothing enforces that and a shift left is the only
-;; useful direction here.
-;;
-;; `:demand' because the `:hook' would otherwise defer the form, and
-;; `marginalia-mode' has to be on before the first prompt rather than
-;; after the first completion list.
+;; Marginalia annotates the completion metadata rather than the UI, and
+;; vertico asks it only for the rows on screen.
 (use-package marginalia
   :ensure t
-  :demand t
-  :preface
-  (defun rjd/completions-truncate-lines ()
-    "Truncate rather than wrap in \"*Completions*\".
-A candidate wider than the midpoint pushes its own annotation past
-the right edge; wrapping that costs a whole second line."
-    (setq truncate-lines t))
-  :custom
-  (marginalia-align 'center)
-  (marginalia-align-offset -3)
-  :hook (completion-list-mode . rjd/completions-truncate-lines)
   :config
   (marginalia-mode))
 
