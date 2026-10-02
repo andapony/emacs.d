@@ -1133,6 +1133,17 @@ whatever another machine has synced in since."
   (defun rjd/agent-shell-drop-comint-completion ()
     "Stop `comint-mode' completing prose as filenames in this buffer."
     (setq-local comint-dynamic-complete-functions nil))
+
+  ;; ── Completions that refilter on agent output ────────────────────
+  ;; With `completion-eager-update', an open "*Completions*" rebuilds on
+  ;; every change to the buffer it completes in -- and here most changes
+  ;; are the agent's output streaming in, not typing.  Each chunk that
+  ;; lands while an @file or /command list is open reran the capfs and
+  ;; redrew the list ("Making completion list..."), stalling the input.
+  ;; The list still opens on @, / and TAB; it just stops refiltering.
+  (defun rjd/agent-shell-static-completions ()
+    "Stop \"*Completions*\" refiltering as this buffer changes."
+    (setq-local completion-eager-update nil))
   :custom
   ;; ── Container execution ──────────────────────────────────────────
   ;; -i is required: acp.el speaks JSON-RPC over the adapter's stdin.
@@ -1209,6 +1220,7 @@ whatever another machine has synced in since."
   (rjd/agent-shell-version-mode 1)
 
   (add-hook 'agent-shell-mode-hook #'rjd/agent-shell-drop-comint-completion)
+  (add-hook 'agent-shell-mode-hook #'rjd/agent-shell-static-completions)
 
   ;; ── Ergonomics (optional, but suited to your complaints) ─────────
   ;; RET inserts a newline; explicit send. Multi-line prompts stop
