@@ -263,10 +263,18 @@ everywhere else."
   :custom
   (shr-image-animate nil))
 
+;; Links go to eww, except those through SFPL's EZproxy, which is how the
+;; library lets patrons read O'Reilly's ebooks: the Book list saves them.
+;; eww cannot run O'Reilly's reader, a JavaScript app, and cannot even
+;; reach it, since the proxy sends no intermediate certificate, which a
+;; desktop browser fetches for itself and GnuTLS does not.  So they go to
+;; the system's browser: `open' on macOS, `xdg-open' on a Linux desktop.
 (use-package browse-url
   :defer t
   :custom
-  (browse-url-browser-function 'eww-browse-url))
+  (browse-url-browser-function 'eww-browse-url)
+  (browse-url-handlers
+   '(("\\`https://[^/]*ezproxy\\.sfpl\\.org/" . browse-url-default-browser))))
 
 ;;; Remote hosts
 
