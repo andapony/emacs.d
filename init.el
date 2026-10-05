@@ -839,12 +839,79 @@ traversing corrupts its iteration."
 
 ;;; Version control
 
+;; On the host, git for anything under ~/projects runs inside the claude-dev
+;; container, through claude-container's `container-git' wrapper.  The agent
+;; can write every repo there, .git/ included, and a repo's own config and
+;; hooks decide what git executes -- `core.fsmonitor' alone runs on every
+;; status, so merely visiting a file would run it as the host user, with the
+;; host's credentials.  The wrapper runs git locally for repos outside
+;; ~/projects, so this is safe to point everything at.  AGENT-ACCESS.md in
+;; claude-container has the reasoning.
+;;
+;; nil -- plain git -- inside the container itself, whose Emacs loads this
+;; same file, and on a machine without a claude-container checkout.
+(defconst rjd/container-git
+  (let ((wrapper (expand-file-name "~/projects/claude-container/container-git")))
+    (and (not (file-exists-p "/.dockerenv"))
+         (not (file-exists-p "/run/.containerenv"))
+         (file-executable-p wrapper)
+         wrapper))
+  "The host's wrapper that runs git inside claude-dev, or nil.")
+
 ;; No :bind here.  `magit-define-global-key-bindings' defaults to `default',
 ;; so magit installs C-x g for `magit-status' and C-x M-g for
 ;; `magit-dispatch' on its own.
 (use-package magit
   :ensure t
-  :defer t)
+  :defer t
+  :custom
+  ;; Local repos only: over Tramp magit uses `magit-remote-git-executable'.
+  (magit-git-executable (or rjd/container-git (executable-find "git") "git")))
+
+;; Magit's commit, rebase and similar editors, when git runs in the
+;; container.  with-editor normally sets GIT_EDITOR to this host's
+;; emacsclient, which does not exist in there.  With no emacsclient it uses
+;; its "sleeping editor" instead: a shell snippet that prints the file name
+;; to the process output and sleeps until signalled.  The identity mount
+;; makes that file name valid here, so opening it needs nothing more.
+;;
+;; Ending it does.  `with-editor-return' signals the editor's PID with a
+;; `kill' run through `process-file', which for a local buffer runs on this
+;; host -- but the PID is the container's.  Unhandled, git would wait for a
+;; signal that never comes, and the host would instead send USR1, whose
+;; default action is to terminate, to whichever of its own processes has
+;; that number.  So the advice takes the PID before with-editor sees it and
+;; signals it in the container.  `with-editor--pid' is private: if a
+;; with-editor upgrade changes how it is read, this is what to recheck.
+(use-package with-editor
+  :defer t
+  :if rjd/container-git
+  :preface
+  (defun rjd/with-editor-return-in-container (return cancel)
+    "Call RETURN with CANCEL, signalling the editor in claude-dev if it ran there.
+A buffer under ~/projects was opened by git running in the container, so
+the sleeping editor's PID belongs to the container rather than this host."
+    (let ((pid with-editor--pid))
+      (if (not (and pid
+                    (string-prefix-p
+                     (file-name-as-directory (file-truename "~/projects"))
+                     (file-truename default-directory))))
+          (funcall return cancel)
+        (setq with-editor--pid nil)
+        (funcall return cancel)
+        ;; The same environment overrides `container-git' honours.
+        (unless (eql 0 (call-process
+                        (or (getenv "CONTAINER_RUNTIME") "docker") nil nil nil
+                        "exec" (or (getenv "CLAUDE_CONTAINER") "claude-dev")
+                        "sh" "-c" "kill -s \"$0\" \"$1\""
+                        (if cancel "USR2" "USR1") pid))
+          (message "Could not signal git's editor (PID %s) in the container"
+                   pid)))))
+  :custom
+  (with-editor-emacsclient-executable nil)
+  :config
+  (advice-add 'with-editor-return :around
+              #'rjd/with-editor-return-in-container))
 
 (use-package git-commit
   ;; Configure only -- git-commit.el ships inside the magit package, which
@@ -867,6 +934,15 @@ traversing corrupts its iteration."
   ;; org-sync role.  The default `ask' turns each of those into a prompt
   ;; whose answer is always yes.
   (vc-follow-symlinks t))
+
+;; vc runs git on every `find-file' -- and project.el's file listing goes
+;; through here too -- so it needs the wrapper as much as Magit does.
+;; Unlike Magit, vc has no separate remote program: under the wrapper a
+;; /ssh: file loses vc, though Magit there keeps working.
+(use-package vc-git
+  :defer t
+  :custom
+  (vc-git-program (or rjd/container-git "git")))
 
 ;;; Syntax checking
 

@@ -76,6 +76,22 @@ commentary names what it hooks.  Both are opt-in minor modes, enabled
 from `init.el`, so the recovery from a bad upgrade is to turn one off
 rather than to fix it under pressure.
 
+## Git through the container
+
+On the host, Magit and vc run git through claude-container's
+`container-git` wrapper (`rjd/container-git` in `init.el`), so a repo's
+agent-writable `.git/config` and hooks execute inside the container, not
+as the host user.  It is nil, and git is plain git, inside the container
+and on a machine without that checkout.
+
+Commit editing depends on with-editor's private `with-editor--pid`:
+`rjd/with-editor-return-in-container` takes the PID from it so that
+with-editor's own host-side `kill` never sees a container PID.  If a
+with-editor upgrade stops reading it there, that `kill` would signal
+whichever *host* process has the number.  After upgrading with-editor,
+recheck that `with-editor-return` still reads `with-editor--pid` before
+signalling.
+
 ## Conventions
 
 - Always use `rjd/` as a prefix for any new global identifiers (functions,
