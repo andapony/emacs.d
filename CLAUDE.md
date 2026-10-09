@@ -21,8 +21,9 @@ commands an autoload cookie rather than adding a `require`.
 A package big enough for its own repository stays loaded the same way:
 its checkout under `~/projects` is symlinked into `user-lisp/`, which
 Emacs follows.  The `setup` repo's `emacs_user_lisp_repos` list clones
-each one and makes its link.  The Book list, org-pa and c2log are linked
-this way, each as `user-lisp/NAME` -> `~/projects/NAME`; each has its
+each one and makes its link.  The Book list, org-pa, c2log and
+note-maker are linked this way, each as `user-lisp/NAME` ->
+`~/projects/NAME`; each has its
 own `CLAUDE.md`, and their settings stay in `private.el`.  Each such
 symlink is gitignored and must tolerate being absent, since it dangles
 on a machine without the checkout, and then the package's commands are

@@ -17,6 +17,7 @@ flycheck_*.el
 # The setup repo's emacs_user_lisp_repos clones and links each one.
 user-lisp/book-list
 user-lisp/c2log
+user-lisp/note-maker
 user-lisp/org-pa
 
 # Private settings: a symlink into the private dotfiles repo, made by setup
