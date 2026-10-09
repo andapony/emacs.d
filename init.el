@@ -163,7 +163,46 @@ everywhere else."
 
 ;;; Editing defaults
 
-(use-package emacs
+(use-package ispell
+  :preface
+  ;; The nearest thing Emacs has to autocorrect: fix a typo once and an
+  ;; abbrev fixes it from then on, as soon as the word is finished.  This
+  ;; goes through `ispell-word' rather than jinx, because jinx offers no
+  ;; public way to learn what a word was corrected to.
+  (defun rjd/ispell-correct-and-abbrev (local)
+    "Correct the nearest misspelling at or before point, and keep the fix.
+The correction becomes an abbrev, so `abbrev-mode' makes it again
+whenever the same typo is typed.  With prefix argument LOCAL, define
+it in the major mode's abbrev table rather than the global one."
+    (interactive "P")
+    (let (before after)
+      (save-excursion
+        ;; `ispell-word' returns nil for a correct word; walk back until it
+        ;; returns anything else, which is a correction or a quit.
+        (while (and (not (and (setq before (thing-at-point 'word t))
+                              (ispell-word nil 'quietly)))
+                    (not (bobp)))
+          (backward-word)
+          (unless (bobp) (backward-char)))
+        (setq after (thing-at-point 'word t)))
+      (if (and before after (not (equal before after)))
+          (let ((before (downcase before))
+                (after (downcase after)))
+            ;; abbrev_defs is shared between machines, and each Emacs writes
+            ;; its whole table.  Merge in what the others saved, add this
+            ;; one, and save at once -- then clear the changed flag, so the
+            ;; save on exit does not later write back a table that has
+            ;; fallen behind theirs.
+            (when (file-readable-p abbrev-file-name)
+              (quietly-read-abbrev-file))
+            (define-abbrev (if local local-abbrev-table global-abbrev-table)
+              before after)
+            (write-abbrev-file)
+            (setq abbrevs-changed nil)
+            (message "\"%s\" now expands to \"%s\" %s"
+                     before after (if local "in this mode" "everywhere")))
+        (user-error "No typo at or before point"))))
+  :bind ("C-c s" . rjd/ispell-correct-and-abbrev)
   :custom
   (ispell-program-name "aspell")
   ;; Name the dictionary rather than letting aspell take it from the locale.
@@ -174,6 +213,23 @@ everywhere else."
   ;; makes `flyspell-prog-mode' bearable; it replaced `--run-together', whose
   ;; suggestions were noise.  `ultra' is aspell's fastest suggestion mode.
   (ispell-extra-args '("--sug-mode=ultra" "--camel-case")))
+
+(use-package abbrev
+  :custom
+  ;; Kept in ~/Sync so that a typo fixed on one machine is fixed on all of
+  ;; them.  A machine without ~/Sync -- a work one, or the claude-dev
+  ;; container -- keeps its own in ~/.
+  (abbrev-file-name (if (file-directory-p "~/Sync")
+                        "~/Sync/emacs/abbrev_defs"
+                      "~/.abbrev_defs"))
+  ;; Written on exit without asking, so an abbrev defined some other way
+  ;; than `rjd/ispell-correct-and-abbrev' is kept too.
+  (save-abbrevs 'silently)
+  :config
+  ;; write-region does not create directories, so make ~/Sync/emacs before
+  ;; anything tries to save there.
+  (make-directory (file-name-directory abbrev-file-name) t)
+  (setq-default abbrev-mode t))
 
 (use-package emacs
   :custom
@@ -1109,6 +1165,24 @@ navigating by Go declarations."
   ;; Globalized mode; only actually turns on in org files under
   ;; `org-chronicle-root'.
   (org-chronicle-global-entity-links-mode 1))
+
+;;; Spelling
+
+;; jinx checks spelling as you type, in prose and in code's comments and
+;; strings.  It reaches enchant through a C module it compiles on first
+;; load, which needs a C compiler, pkg-config and enchant's headers -- the
+;; setup playbook installs them, and the claude-dev image carries them.
+;; enchant finds aspell's dictionaries, so it agrees with `ispell' above.
+(use-package jinx
+  :ensure t
+  :hook (emacs-startup . global-jinx-mode)
+  :bind (("M-$" . jinx-correct)
+         ("C-M-$" . jinx-languages))
+  :custom
+  ;; Named for the same reason as `ispell-dictionary': the default comes
+  ;; from the locale, which a GUI Emacs launched from the Dock does not
+  ;; have, and which is plain C.UTF-8 in the container.
+  (jinx-languages "en_US"))
 
 ;;; Mail
 
