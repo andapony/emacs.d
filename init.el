@@ -164,45 +164,6 @@ everywhere else."
 ;;; Editing defaults
 
 (use-package ispell
-  :preface
-  ;; The nearest thing Emacs has to autocorrect: fix a typo once and an
-  ;; abbrev fixes it from then on, as soon as the word is finished.  This
-  ;; goes through `ispell-word' rather than jinx, because jinx offers no
-  ;; public way to learn what a word was corrected to.
-  (defun rjd/ispell-correct-and-abbrev (local)
-    "Correct the nearest misspelling at or before point, and keep the fix.
-The correction becomes an abbrev, so `abbrev-mode' makes it again
-whenever the same typo is typed.  With prefix argument LOCAL, define
-it in the major mode's abbrev table rather than the global one."
-    (interactive "P")
-    (let (before after)
-      (save-excursion
-        ;; `ispell-word' returns nil for a correct word; walk back until it
-        ;; returns anything else, which is a correction or a quit.
-        (while (and (not (and (setq before (thing-at-point 'word t))
-                              (ispell-word nil 'quietly)))
-                    (not (bobp)))
-          (backward-word)
-          (unless (bobp) (backward-char)))
-        (setq after (thing-at-point 'word t)))
-      (if (and before after (not (equal before after)))
-          (let ((before (downcase before))
-                (after (downcase after)))
-            ;; abbrev_defs is shared between machines, and each Emacs writes
-            ;; its whole table.  Merge in what the others saved, add this
-            ;; one, and save at once -- then clear the changed flag, so the
-            ;; save on exit does not later write back a table that has
-            ;; fallen behind theirs.
-            (when (file-readable-p abbrev-file-name)
-              (quietly-read-abbrev-file))
-            (define-abbrev (if local local-abbrev-table global-abbrev-table)
-              before after)
-            (write-abbrev-file)
-            (setq abbrevs-changed nil)
-            (message "\"%s\" now expands to \"%s\" %s"
-                     before after (if local "in this mode" "everywhere")))
-        (user-error "No typo at or before point"))))
-  :bind ("C-c s" . rjd/ispell-correct-and-abbrev)
   :custom
   (ispell-program-name "aspell")
   ;; Name the dictionary rather than letting aspell take it from the locale.
@@ -223,7 +184,7 @@ it in the major mode's abbrev table rather than the global one."
                         "~/Sync/emacs/abbrev_defs"
                       "~/.abbrev_defs"))
   ;; Written on exit without asking, so an abbrev defined some other way
-  ;; than `rjd/ispell-correct-and-abbrev' is kept too.
+  ;; than `rjd/jinx-correct-and-abbrev' is kept too.
   (save-abbrevs 'silently)
   :config
   ;; write-region does not create directories, so make ~/Sync/emacs before
@@ -1175,6 +1136,85 @@ navigating by Go declarations."
 ;; enchant finds aspell's dictionaries, so it agrees with `ispell' above.
 (use-package jinx
   :ensure t
+  :preface
+  ;; The nearest thing Emacs has to autocorrect: fix a typo once and an
+  ;; abbrev fixes it from then on, as soon as the word is finished.  jinx
+  ;; has no public way to say what a word was corrected to, so the command
+  ;; watches the buffer while `jinx-correct' runs.  A correction shows up
+  ;; as a word deleted and its replacement inserted where it was, one
+  ;; straight after the other.  Taking only such pairs, rather than every
+  ;; change, leaves out whatever else edits the buffer while the menu is
+  ;; open -- agent-shell's output, which only ever inserts.
+  (defun rjd/jinx--word-replacements (changes)
+    "Return (OLD . NEW) for each word replacement in CHANGES.
+CHANGES lists (POS DELETED INSERTED) in the order the changes were
+made.  A replacement is one change that does both, or a deletion and an
+insertion, in either order, that meet."
+    (let (pairs)
+      (while changes
+        (pcase-let ((`(,p1 ,d1 ,i1) (car changes))
+                    (`(,p2 ,d2 ,i2) (cadr changes)))
+          (cond
+           ((and (not (string-empty-p d1)) (not (string-empty-p i1)))
+            (push (cons d1 i1) pairs)
+            (setq changes (cdr changes)))
+           ;; Insert after the word, then delete it: what jinx does today.
+           ((and p2 (string-empty-p d1) (string-empty-p i2)
+                 (= (+ p2 (length d2)) p1))
+            (push (cons d2 i1) pairs)
+            (setq changes (cddr changes)))
+           ;; Delete the word, then insert at the same place.
+           ((and p2 (string-empty-p i1) (string-empty-p d2) (= p1 p2))
+            (push (cons d1 i2) pairs)
+            (setq changes (cddr changes)))
+           (t (setq changes (cdr changes))))))
+      (seq-filter (pcase-lambda (`(,old . ,new))
+                    (and (string-match-p "\\`[[:alpha:]']+\\'" old)
+                         (string-match-p "\\`[[:alpha:]']+\\'" new)
+                         (not (string-equal-ignore-case old new))))
+                  (nreverse pairs))))
+
+  (defun rjd/jinx-correct-and-abbrev (local)
+    "Correct misspellings with `jinx-correct', and keep each fix.
+Every correction becomes an abbrev, so `abbrev-mode' makes it again
+whenever the same typo is typed.  A word saved to a dictionary instead
+changes nothing, so makes no abbrev.  With prefix argument LOCAL, define
+the abbrevs in the major mode's abbrev table rather than the global one."
+    (interactive "*P")
+    (when (and local (not local-abbrev-table))
+      (user-error "No abbrev table for %s" major-mode))
+    (let* ((deleted "")
+           changes
+           (before (lambda (beg end)
+                     (setq deleted (buffer-substring-no-properties beg end))))
+           (after (lambda (beg end _len)
+                    (push (list beg deleted (buffer-substring-no-properties beg end))
+                          changes)
+                    (setq deleted ""))))
+      (add-hook 'before-change-functions before nil t)
+      (add-hook 'after-change-functions after nil t)
+      (unwind-protect
+          (jinx-correct)
+        (remove-hook 'before-change-functions before t)
+        (remove-hook 'after-change-functions after t))
+      (when-let* ((pairs (rjd/jinx--word-replacements (nreverse changes))))
+        ;; abbrev_defs is shared between machines, and each Emacs writes its
+        ;; whole table.  Merge in what the others saved, add these, and save
+        ;; at once -- then clear the changed flag, so the save on exit does
+        ;; not later write back a table that has fallen behind theirs.
+        (when (file-readable-p abbrev-file-name)
+          (quietly-read-abbrev-file))
+        (pcase-dolist (`(,old . ,new) pairs)
+          (define-abbrev (if local local-abbrev-table global-abbrev-table)
+            (downcase old) (downcase new)))
+        (write-abbrev-file)
+        (setq abbrevs-changed nil)
+        (message "Now expanding %s %s"
+                 (mapconcat (pcase-lambda (`(,old . ,new))
+                              (format "\"%s\" to \"%s\""
+                                      (downcase old) (downcase new)))
+                            pairs ", ")
+                 (if local "in this mode" "everywhere")))))
   ;; The global mode covers text, prog and conf modes only, and the
   ;; agent-shell buffer is a comint one, so it is named here.  The agent's
   ;; output and past prompts are read-only, which jinx skips, so only the
@@ -1183,7 +1223,8 @@ navigating by Go declarations."
   :hook ((emacs-startup . global-jinx-mode)
          (agent-shell-mode . jinx-mode))
   :bind (("M-$" . jinx-correct)
-         ("C-M-$" . jinx-languages))
+         ("C-M-$" . jinx-languages)
+         ("C-c s" . rjd/jinx-correct-and-abbrev))
   :custom
   ;; Named for the same reason as `ispell-dictionary': the default comes
   ;; from the locale, which a GUI Emacs launched from the Dock does not
