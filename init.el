@@ -1175,7 +1175,13 @@ navigating by Go declarations."
 ;; enchant finds aspell's dictionaries, so it agrees with `ispell' above.
 (use-package jinx
   :ensure t
-  :hook (emacs-startup . global-jinx-mode)
+  ;; The global mode covers text, prog and conf modes only, and the
+  ;; agent-shell buffer is a comint one, so it is named here.  The agent's
+  ;; output and past prompts are read-only, which jinx skips, so only the
+  ;; prompt being written is checked.  The viewport's compose buffer is a
+  ;; text mode, so the global mode already has it.
+  :hook ((emacs-startup . global-jinx-mode)
+         (agent-shell-mode . jinx-mode))
   :bind (("M-$" . jinx-correct)
          ("C-M-$" . jinx-languages))
   :custom
