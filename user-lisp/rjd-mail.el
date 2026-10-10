@@ -53,11 +53,13 @@
 ;; one, which puts "-oi" straight after the program and so would run
 ;; "docker -oi exec ...".
 ;;
-;; Gmail needs three things from mu4e beyond these contexts, set in
-;; init.el: duplicates hidden, because a message in the Inbox is also in
-;; All Mail; related messages left out of searches, or a thread's spam
-;; and trash come with it; and bookmarks that leave Spam and Trash out,
-;; for which `rjd/mail-without-junk' builds the query.
+;; Gmail needs three things from mu4e beyond these contexts:
+;; duplicates hidden, because a message in the Inbox is also in All
+;; Mail; related messages left out of searches, or a thread's spam and
+;; trash come with it -- both set in init.el; and Spam and Trash left
+;; out of searches, which the mode does through
+;; `mu4e-query-rewrite-function' with `rjd/mail-search-query', unless
+;; a search names them.
 ;;
 ;; Enable with `rjd/mail-mode', once mu4e has loaded.
 
@@ -68,6 +70,7 @@
 (declare-function make-mu4e-context "mu4e-context")
 (defvar mu4e-contexts)
 (defvar mu4e-get-mail-command)
+(defvar mu4e-query-rewrite-function)
 (declare-function mu4e-root-maildir "mu4e-server")
 (declare-function message-narrow-to-headers "message")
 (declare-function message-fetch-field "message")
@@ -393,20 +396,55 @@ the prefixed command in `message-sendmail-extra-arguments', that makes
 
 ;;; Queries
 
-;;;###autoload
+(defun rjd/mail--junk-folders (accounts)
+  "The maildirs of the Spam and Trash folders of ACCOUNTS."
+  (mapcan (lambda (account)
+            (list (rjd/mail--folder account :spam)
+                  (rjd/mail--folder account :trash)))
+          accounts))
+
 (defun rjd/mail-without-junk (query)
-  "Return mu QUERY with every declared account's Spam and Trash left out.
+  "Return mu QUERY with every active account's Spam and Trash left out.
 QUERY itself when no account is active; see `rjd/mail-active-accounts'."
   (if-let* ((accounts (rjd/mail-active-accounts)))
       (format "(%s) AND NOT (%s)"
               query
               (mapconcat (lambda (maildir) (concat "maildir:" maildir))
-                         (mapcan (lambda (account)
-                                   (list (rjd/mail--folder account :spam)
-                                         (rjd/mail--folder account :trash)))
-                                 accounts)
+                         (rjd/mail--junk-folders accounts)
                          " OR "))
     query))
+
+(defun rjd/mail--asks-for-junk-p (query)
+  "Non-nil if mu QUERY names junk, so should find it.
+That is: it names an active account's Spam or Trash folder, whole, as
+a maildir -- which a query already rewritten by `rjd/mail-without-junk'
+does too; or it asks for flag:trashed, not NOT flag:trashed; or it
+looks a message up by its ID, as following an org link does."
+  (or (seq-some (lambda (folder)
+                  (string-match-p (concat "maildir:\"?" (regexp-quote folder)
+                                          "\\(?:[\")[:space:]]\\|\\'\\)")
+                                  query))
+                (rjd/mail--junk-folders (rjd/mail-active-accounts)))
+      (let ((case-fold-search t)
+            (start 0)
+            found)
+        (while (and (not found)
+                    (string-match "\\(\\_<not[[:space:]]+\\|-\\)?flag:trashed"
+                                  query start))
+          (setq found (not (match-beginning 1))
+                start (match-end 0)))
+        found)
+      (string-match-p "\\_<msgid:" query)))
+
+(defun rjd/mail-search-query (query)
+  "Return mu QUERY with junk left out, unless it asks for junk.
+For `mu4e-query-rewrite-function', which mu4e applies to every search
+-- typed, a bookmark's or a maildir's -- so Spam and Trash stay out of
+all of them through `rjd/mail-without-junk'.  A query that names them
+is left alone; see `rjd/mail--asks-for-junk-p'."
+  (if (rjd/mail--asks-for-junk-p query)
+      query
+    (rjd/mail-without-junk query)))
 
 
 ;;; Flags on unread mail
@@ -452,15 +490,18 @@ Does nothing before mu4e has started and knows the root."
 ;;; Mode
 
 (defvar rjd/mail--before-mode nil
-  "`mu4e-contexts' and `mu4e-get-mail-command' before the mode was on.")
+  "`mu4e-contexts', `mu4e-get-mail-command' and
+`mu4e-query-rewrite-function' before the mode was on.")
 
 ;;;###autoload
 (define-minor-mode rjd/mail-mode
   "Make each account in `rjd/mail-active-accounts' a mu4e context.
-Also fetch mail for them through `rjd/mail-get-mail-command', and keep
-message buffers outside mu4e on the global default identity.  Turning
-the mode off puts back the contexts and fetch command it replaced, and
-the global defaults if a context was entered.
+Also fetch mail for them through `rjd/mail-get-mail-command', leave
+their Spam and Trash out of every search that does not ask for them,
+through `rjd/mail-search-query', and keep message buffers outside mu4e
+on the global default identity.  Turning the mode off puts back the
+contexts, fetch command and query rewriting it replaced, and the
+global defaults if a context was entered.
 
 While on, each mu4e index first moves the accounts' unread mail that
 carries flags out of new/; see `rjd/mail-file-flagged-new'."
@@ -471,9 +512,13 @@ carries flags out of new/; see `rjd/mail-file-flagged-new'."
         (unless rjd/mail--before-mode
           (setq rjd/mail--before-mode
                 (list (bound-and-true-p mu4e-contexts)
-                      (bound-and-true-p mu4e-get-mail-command))))
+                      (bound-and-true-p mu4e-get-mail-command)
+                      (if (boundp 'mu4e-query-rewrite-function)
+                          mu4e-query-rewrite-function
+                        #'identity))))
         (setq mu4e-contexts (rjd/mail-contexts)
-              mu4e-get-mail-command #'rjd/mail-get-mail-command)
+              mu4e-get-mail-command #'rjd/mail-get-mail-command
+              mu4e-query-rewrite-function #'rjd/mail-search-query)
         (add-hook 'message-mode-hook #'rjd/mail--outside-mu4e)
         (advice-add 'mu4e-update-index :before
                     #'rjd/mail--file-flagged-new-before-index))
@@ -484,6 +529,7 @@ carries flags out of new/; see `rjd/mail-file-flagged-new'."
       (rjd/mail--leave)
       (setq mu4e-contexts (nth 0 rjd/mail--before-mode)
             mu4e-get-mail-command (nth 1 rjd/mail--before-mode)
+            mu4e-query-rewrite-function (nth 2 rjd/mail--before-mode)
             rjd/mail--before-mode nil))))
 
 (provide 'rjd-mail)

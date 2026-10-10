@@ -208,7 +208,8 @@ depends on the private.el in use, so the contexts are not checked."
   (should (eq mu4e-search-skip-duplicates t))
   (should (eq mu4e-search-include-related nil))
   (should (eq mu4e-context-policy 'pick-first))
-  (should (eq mu4e-compose-context-policy 'ask)))
+  (should (eq mu4e-compose-context-policy 'ask))
+  (should (eq mu4e-query-rewrite-function #'rjd/mail-search-query)))
 
 (defconst rjd/smoke-invitation
   (concat "MIME-Version: 1.0\n"

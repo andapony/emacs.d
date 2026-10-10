@@ -1435,16 +1435,17 @@ the abbrevs in the major mode's abbrev table rather than the global one."
   ;; Don't keep message buffers around
   (message-kill-buffer-on-exit t)
 
-  ;; Each account's Spam and Trash folders are left out by
-  ;; `rjd/mail-without-junk', which reads the declared accounts each time
-  ;; a query runs, so these are functions rather than strings.
+  ;; Each account's Spam and Trash folders are left out of these, as of
+  ;; every search that does not name them, by `rjd/mail-mode', through
+  ;; `mu4e-query-rewrite-function'.  These queries leave out only the
+  ;; Fastmail default's.
   (mu4e-bookmarks
-   `((:name "Unread" :key ?u
-      :query ,(lambda () (rjd/mail-without-junk "flag:unread AND NOT flag:trashed AND NOT maildir:/Spam")))
+   '((:name "Unread" :key ?u
+      :query "flag:unread AND NOT flag:trashed AND NOT maildir:/Spam")
      (:name "Today" :key ?t
-      :query ,(lambda () (rjd/mail-without-junk "date:today..now AND NOT flag:trashed AND NOT maildir:/Spam")))
+      :query "date:today..now AND NOT flag:trashed AND NOT maildir:/Spam")
      (:name "Last 7 days" :key ?w
-      :query ,(lambda () (rjd/mail-without-junk "date:7d..now AND NOT flag:trashed AND NOT maildir:/Spam")))
+      :query "date:7d..now AND NOT flag:trashed AND NOT maildir:/Spam")
      (:name "Flagged" :key ?f :query "flag:flagged")))
   :config
   (rjd/mail-mode 1)

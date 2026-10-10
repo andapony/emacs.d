@@ -47,6 +47,7 @@
 (defvar mu4e-trash-without-flag)
 (defvar mu4e-contexts)
 (defvar mu4e-get-mail-command)
+(defvar mu4e-query-rewrite-function)
 
 
 ;;; Fixtures
@@ -483,6 +484,55 @@ send with: no account, and no default saved to fall back on."
   (let ((rjd/mail-accounts nil))
     (should (equal (rjd/mail-without-junk "flag:unread") "flag:unread"))))
 
+(defconst rjd/mail-test-junk-clause
+  (concat " AND NOT (maildir:/gmail-test/spam OR maildir:/gmail-test/trash"
+          " OR maildir:/other/Junk OR maildir:/other/Trash)")
+  "What leaving both test accounts' Spam and Trash out adds to a query.")
+
+(defmacro rjd/mail-test-with-both-accounts (&rest body)
+  "Run BODY with both test accounts declared."
+  (declare (indent 0))
+  `(let ((rjd/mail-accounts (list rjd/mail-test-gmail rjd/mail-test-other)))
+     ,@body))
+
+(ert-deftest rjd/mail-search-leaves-out-junk ()
+  "An ordinary search, typed or a bookmark's, finds no Spam or Trash."
+  (rjd/mail-test-with-both-accounts
+    (should (equal (rjd/mail-search-query "from:alice")
+                   (concat "(from:alice)" rjd/mail-test-junk-clause)))
+    (should (equal (rjd/mail-search-query "flag:unread AND NOT flag:trashed")
+                   (concat "(flag:unread AND NOT flag:trashed)"
+                           rjd/mail-test-junk-clause)))))
+
+(ert-deftest rjd/mail-search-naming-junk-is-left-alone ()
+  "A search that names a Spam or Trash folder, or trashed mail, finds it."
+  (rjd/mail-test-with-both-accounts
+    (dolist (query '("maildir:/gmail-test/spam"
+                     "maildir:\"/other/Trash\" AND from:bob"
+                     "(maildir:/gmail-test/trash)"
+                     "flag:trashed"
+                     "from:bob AND flag:trashed"))
+      (should (equal (rjd/mail-search-query query) query)))))
+
+(ert-deftest rjd/mail-search-only-names-junk-by-whole-folder ()
+  "A folder whose name merely starts like a junk folder's is not junk."
+  (rjd/mail-test-with-both-accounts
+    (should (equal (rjd/mail-search-query "maildir:/gmail-test/spammy")
+                   (concat "(maildir:/gmail-test/spammy)"
+                           rjd/mail-test-junk-clause)))))
+
+(ert-deftest rjd/mail-search-for-a-message-id-is-left-alone ()
+  "Following an org link finds its message wherever it now is."
+  (rjd/mail-test-with-both-accounts
+    (should (equal (rjd/mail-search-query "msgid:abc@example.com")
+                   "msgid:abc@example.com"))))
+
+(ert-deftest rjd/mail-search-is-rewritten-once ()
+  "Narrowing searches the query already rewritten, which stays as it is."
+  (rjd/mail-test-with-both-accounts
+    (let ((once (rjd/mail-search-query "from:alice")))
+      (should (equal (rjd/mail-search-query once) once)))))
+
 
 ;;; Flags on unread mail
 
@@ -541,14 +591,17 @@ next sync removes Gmail's Starred label (#18)."
   (let ((rjd/mail-accounts (list rjd/mail-test-gmail))
         (mu4e-contexts nil)
         (mu4e-get-mail-command "true")
+        (mu4e-query-rewrite-function 'identity)
         (rjd/mail-mode nil)
         (rjd/mail--before-mode nil))
     (rjd/mail-mode 1)
     (should (equal (mapcar #'mu4e-context-name mu4e-contexts) '("gmail-test")))
     (should (eq mu4e-get-mail-command #'rjd/mail-get-mail-command))
+    (should (eq mu4e-query-rewrite-function #'rjd/mail-search-query))
     (rjd/mail-mode -1)
     (should (equal mu4e-contexts nil))
-    (should (equal mu4e-get-mail-command "true"))))
+    (should (equal mu4e-get-mail-command "true"))
+    (should (eq mu4e-query-rewrite-function 'identity))))
 
 (ert-deftest rjd/mail-mode-files-flagged-new-before-indexing ()
   "Every index -- after a fetch, or on its own -- sees the flags (#18)."
@@ -628,6 +681,10 @@ container -- decided by the machine, not forced."
 (ert-deftest rjd/mail-without-junk-where-mail-cannot-run ()
   (rjd/mail-test-where-mail-cannot-run
     (should (equal (rjd/mail-without-junk "flag:unread") "flag:unread"))))
+
+(ert-deftest rjd/mail-search-without-active-accounts ()
+  (rjd/mail-test-where-mail-cannot-run
+    (should (equal (rjd/mail-search-query "from:alice") "from:alice"))))
 
 (ert-deftest rjd/mail-file-flagged-new-where-mail-cannot-run ()
   "No account's maildir is touched."
