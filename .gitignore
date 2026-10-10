@@ -43,3 +43,10 @@ recentf.eld
 tramp
 .org-id-locations
 network-security.data
+
+# Written by org-gcal and its dependencies when the calendar is fetched:
+# sync tokens keyed by calendar ID, which is an address, entry locations,
+# and request's cookie jar.  No OAuth token: that stays in oama.
+persist/
+request/
+.org-generic-id-locations

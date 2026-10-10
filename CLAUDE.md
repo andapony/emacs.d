@@ -85,6 +85,37 @@ commentary names what it hooks.  Both are opt-in minor modes, enabled
 from `init.el`, so the recovery from a bad upgrade is to turn one off
 rather than to fix it under pressure.
 
+## Mail
+
+mu4e reads mail through `rjd-mail` (user-lisp), which turns the
+accounts declared in `private.el` as `rjd-mail-accounts` into mu4e
+contexts.  Entering one sets the account's identity and folders and
+leaving it restores the global defaults -- the Fastmail identity and
+smtpmail -- so mail written outside mu4e is unchanged; with no account
+declared there are no contexts.  Every mail command (mbsync, msmtp,
+oama) is built with `rjd-mail-command`, which puts
+`rjd-mail-command-prefix` in front: nil inside `claude-dev`, the mail
+container's `docker exec` on the host.  The package's symbols use the
+`rjd-mail-` prefix, not `rjd/`, because that interface was fixed for
+the calendar to build on.  `rjd-mail-mode` is opt-in, enabled from
+mu4e's form in `init.el`.  ERT tests: `test/rjd-mail-test.el`.
+
+## Calendar
+
+Google Calendar reaches the agenda through `rjd-gcal` (user-lisp), which
+has org-gcal fetch one account's calendar, read-only, into
+`~/org-agenda/gcal-gmail-personal.org`.  The account is set in
+`private.el` as `rjd/gcal-account`; without it nothing is fetched.  The
+token comes from oama, through `rjd-mail-command`, by `:around` advice
+on oauth2-auto's `oauth2-auto-access-token` -- an upgrade of org-gcal or
+oauth2-auto can break that silently, the calendar simply no longer
+updating.  **If the calendar disappears from the agenda, that advice is
+the first place to look**; `rjd-gcal.el`'s commentary names what it
+hooks, and `rjd/gcal-mode` is opt-in, enabled from `init.el`.  Nothing
+calls org-gcal's sync, only its fetch.  The file is kept out of the
+combined `.ics` export (advice in `init.el`) and out of org-sync, whose
+file set is the `setup` repo's.  ERT tests: `test/rjd-gcal-test.el`.
+
 ## Git through the container
 
 On the host, Magit and vc run git through claude-container's

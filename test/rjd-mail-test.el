@@ -1,10 +1,9 @@
-;;; rjd-mail-tests.el --- ERT tests for rjd-mail  -*- lexical-binding: t -*-
+;;; rjd-mail-test.el --- ERT tests for rjd-mail  -*- lexical-binding: t -*-
 
 ;;; Commentary:
 ;; Run from the repository root with
 ;;
-;;   emacs -Q --batch -l user-lisp/test/rjd-mail-tests.el \
-;;         -f ert-run-tests-batch-and-exit
+;;   emacs -Q --batch -l test/rjd-mail-test.el -f ert-run-tests-batch-and-exit
 ;;
 ;; `-Q' keeps the personal config out.  This file loads rjd-mail from
 ;; source by its full name, because user-lisp/ also holds the `.elc'
@@ -32,7 +31,7 @@
       (add-to-list 'load-path (expand-file-name dir))))
   (require 'mu4e-context nil :noerror)
   (load (expand-file-name
-         "../rjd-mail.el"
+         "../user-lisp/rjd-mail.el"
          (file-name-directory
           (or load-file-name byte-compile-current-file buffer-file-name)))
         nil :nomessage :nosuffix))
@@ -270,5 +269,5 @@
     (should (equal (funcall mu4e-get-mail-command) "true"))
     (rjd-mail-mode -1)))
 
-(provide 'rjd-mail-tests)
-;;; rjd-mail-tests.el ends here
+(provide 'rjd-mail-test)
+;;; rjd-mail-test.el ends here
