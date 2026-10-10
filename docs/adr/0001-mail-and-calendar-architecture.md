@@ -109,10 +109,16 @@ compose mu4e asks when it is not obvious.  With no accounts declared
 the package does nothing, so a machine without `private.el` starts
 cleanly.
 
-**OAuth client.**  The personal account uses Thunderbird's public
-client ID.  The Cetos client is **open** until Cetos IT answers: either
-an Internal app in a Cetos-owned Cloud project, or Thunderbird's ID if
-it is allowlisted.
+**OAuth client.**  The personal account uses its own "Desktop app"
+OAuth client, in a personal Google Cloud project published "In
+production" and left unverified, under Google's personal-use exemption.
+The spec planned Thunderbird's public client ID, but Google blocks that
+ID outright ("This app is blocked") when it asks for `calendar.readonly`:
+it is approved only for the scopes Thunderbird itself requests, which
+include full calendar but not read-only.  The Cetos client is **open**
+until Cetos IT answers: either an Internal app in a Cetos-owned Cloud
+project, or Thunderbird's ID if it is allowlisted -- which would carry
+mail only, leaving the calendar to the plstore fallback below.
 
 
 ## Consequences
@@ -133,7 +139,8 @@ applies:
   at once) needs a different approach, not another declaration.
 - Under Google's personal-use exemption an unverified "In production"
   client works, but a "Testing" client loses its refresh tokens after 7
-  days.  This matters only on moving away from Thunderbird's ID.
+  days.  The personal client must therefore stay "In production", and
+  its login shows a "Google hasn't verified this app" warning.
 
 Mail and calendar are opt-in, so a bad upgrade is bypassed by turning
 the feature off rather than fixed under pressure.
@@ -165,8 +172,14 @@ configuration.  This repository holds the code and this record.
   working.
 - **A Cetos-owned Internal OAuth app versus Thunderbird's client ID**
   (open for Cetos).  An Internal app in a Cetos Cloud project needs IT
-  to allow creating one; Thunderbird's ID needs IT to allowlist it.
-  Decided when Cetos IT answers.
+  to allow creating one; Thunderbird's ID needs IT to allowlist it, and
+  cannot carry `calendar.readonly` in any case.  Decided when Cetos IT
+  answers.
+- **Thunderbird's client ID for the personal account** (rejected).
+  Blocked for `calendar.readonly`, as above.  Asking it for full
+  `calendar` instead would pass, but the token could then write to the
+  calendar, and read-only would rest on org-gcal never syncing rather
+  than on the scope.
 - **Building the XOAUTH2 SASL plugin on macOS** (rejected).  Not
   reproducible from the setup playbook and fragile across Homebrew
   upgrades; Debian packages it, hence the mail container.
