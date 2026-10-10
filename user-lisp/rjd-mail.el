@@ -43,12 +43,15 @@
 ;; a machine without the mail container.  If the choice is wrong, set
 ;; `rjd/mail-command-prefix' in private.el.
 ;;
-;; A context sends through msmtp, with `rjd/mail-send-it' as
-;; `message-send-mail-function' and the msmtp command, prefix and all,
-;; in `rjd/mail-sendmail-command'.  It is its own function rather than
-;; message's sendmail one, which puts "-oi" straight after the program
-;; and so would run "docker -oi exec ...".  The command is built on
-;; entering the context, so it uses the prefix in force then.
+;; A context sends with `rjd/mail-send-it' as
+;; `message-send-mail-function'.  It decides at send time, from the
+;; message's From: an active account's address goes through that
+;; account's msmtp, behind the prefix; any other address goes to the
+;; sending function the context replaced, smtpmail.  So a draft sends
+;; as the account it was written as, whichever context is current when
+;; it is sent.  It is its own function rather than message's sendmail
+;; one, which puts "-oi" straight after the program and so would run
+;; "docker -oi exec ...".
 ;;
 ;; Gmail needs three things from mu4e beyond these contexts, set in
 ;; init.el: duplicates hidden, because a message in the Inbox is also in
@@ -215,54 +218,6 @@ mu4e's own default, so an update only indexes."
     "true"))
 
 
-;;; Sending
-
-(defvar rjd/mail-sendmail-command nil
-  "The command that sends a message as the current context's account.
-A list of strings, built through `rjd/mail-command'; nil outside every
-context.  `rjd/mail-send-it' adds the recipients.")
-
-(defun rjd/mail-send-it ()
-  "Send the prepared message buffer with `rjd/mail-sendmail-command'.
-A `message-send-mail-function', for the contexts.  The command reads
-the recipients from the message (msmtp's -t), or for a resend is given
-those of its Resent-To.
-
-Not `message-send-mail-with-sendmail', which puts \"-oi\" straight
-after `sendmail-program': with the program \"docker\" and the rest of
-the prefixed command in `message-sendmail-extra-arguments', that makes
-\"docker -oi exec ...\"."
-  (require 'message)
-  (unless rjd/mail-sendmail-command
-    (error "No account to send from: enter a mu4e context first"))
-  (let ((resent-to (save-restriction
-                     (message-narrow-to-headers)
-                     (message-fetch-field "resent-to"))))
-    ;; The separator line becomes the blank line that ends the headers.
-    (goto-char (point-min))
-    (re-search-forward (concat "^" (regexp-quote mail-header-separator) "\n"))
-    (replace-match "\n")
-    (run-hooks 'message-send-mail-hook)
-    (let* ((output (generate-new-buffer " *rjd-mail send*"))
-           (command (append rjd/mail-sendmail-command
-                            (if resent-to
-                                (split-string
-                                 (mail-strip-quoted-names resent-to)
-                                 "[ \t\n,]+" t)
-                              '("-t")))))
-      (unwind-protect
-          (let* ((default-directory "/")
-                 (coding-system-for-write message-send-coding-system)
-                 (status (apply #'call-process-region (point-min) (point-max)
-                                (car command) nil output nil (cdr command))))
-            (unless (eql status 0)
-              (error "Sending with %s failed (%s): %s"
-                     (string-join command " ") status
-                     (string-trim (with-current-buffer output
-                                    (buffer-string))))))
-        (kill-buffer output)))))
-
-
 ;;; Accounts
 
 (defun rjd/mail--mbsync-group (account)
@@ -284,9 +239,6 @@ the prefixed command in `message-sendmail-extra-arguments', that makes
   `((user-mail-address . ,(plist-get account :address))
     (user-full-name . ,(plist-get account :full-name))
     (message-send-mail-function . rjd/mail-send-it)
-    (rjd/mail-sendmail-command
-     . ,(rjd/mail-command "msmtp" "-a" (rjd/mail--msmtp-account account)
-                          "--read-envelope-from"))
     (mu4e-sent-folder . ,(rjd/mail--folder account :sent))
     (mu4e-drafts-folder . ,(rjd/mail--folder account :drafts))
     (mu4e-trash-folder . ,(rjd/mail--folder account :trash))
@@ -366,6 +318,77 @@ ACCOUNTS defaults to `rjd/mail-active-accounts'.  With none, nil."
                  :leave-func #'rjd/mail--leave
                  :match-func (rjd/mail--matcher account)))
               accounts))))
+
+
+;;; Sending
+
+(defun rjd/mail--account-for-address (address)
+  "The active account whose address is ADDRESS, or nil.
+ADDRESS may carry a name and angle brackets, as a From header does."
+  (when address
+    (let ((address (downcase (string-trim (mail-strip-quoted-names address)))))
+      (seq-find (lambda (account)
+                  (equal (downcase (plist-get account :address)) address))
+                (rjd/mail-active-accounts)))))
+
+(defun rjd/mail--sendmail-command (account)
+  "The command that sends a message as ACCOUNT, built through the prefix.
+`rjd/mail-send-it' adds the recipients."
+  (rjd/mail-command "msmtp" "-a" (rjd/mail--msmtp-account account)
+                    "--read-envelope-from"))
+
+(defun rjd/mail-send-it ()
+  "Send the prepared message buffer as the account in its From.
+A `message-send-mail-function', which entering a context sets.  The
+account is chosen now, from the message, not from the context: a draft
+outlives the context it was written in, and message sends with the
+global function, so a draft begun outside mu4e before any context was
+entered comes here too.
+
+From an active account, the message goes to that account's msmtp,
+behind `rjd/mail-command-prefix' as it is now; msmtp reads the
+recipients from the message (-t), or for a resend is given those of
+its Resent-To.  From any other address it goes to the sending function
+the context replaced -- smtpmail, for the Fastmail default.
+
+Not `message-send-mail-with-sendmail', which puts \"-oi\" straight
+after `sendmail-program': with the program \"docker\" and the rest of
+the prefixed command in `message-sendmail-extra-arguments', that makes
+\"docker -oi exec ...\"."
+  (require 'message)
+  (let* ((headers (save-restriction
+                    (message-narrow-to-headers)
+                    (list (message-fetch-field "from")
+                          (message-fetch-field "resent-to"))))
+         (account (rjd/mail--account-for-address (nth 0 headers)))
+         (resent-to (nth 1 headers)))
+    (if (not account)
+        (funcall (or (alist-get 'message-send-mail-function rjd/mail--saved)
+                     (error "No account sends as %s, and no default to send with"
+                            (nth 0 headers))))
+      ;; The separator line becomes the blank line that ends the headers.
+      (goto-char (point-min))
+      (re-search-forward (concat "^" (regexp-quote mail-header-separator) "\n"))
+      (replace-match "\n")
+      (run-hooks 'message-send-mail-hook)
+      (let* ((output (generate-new-buffer " *rjd-mail send*"))
+             (command (append (rjd/mail--sendmail-command account)
+                              (if resent-to
+                                  (split-string
+                                   (mail-strip-quoted-names resent-to)
+                                   "[ \t\n,]+" t)
+                                '("-t")))))
+        (unwind-protect
+            (let* ((default-directory "/")
+                   (coding-system-for-write message-send-coding-system)
+                   (status (apply #'call-process-region (point-min) (point-max)
+                                  (car command) nil output nil (cdr command))))
+              (unless (eql status 0)
+                (error "Sending with %s failed (%s): %s"
+                       (string-join command " ") status
+                       (string-trim (with-current-buffer output
+                                      (buffer-string))))))
+          (kill-buffer output))))))
 
 
 ;;; Queries

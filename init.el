@@ -1397,8 +1397,9 @@ the abbrevs in the major mode's abbrev table rather than the global one."
   ;; Outside every context sending goes out over SMTP; the server, port,
   ;; stream type and the identity to send as are all set in private.el.
   ;; Without that file mu4e still reads mail, and sending is simply
-  ;; unconfigured.  A context sends through msmtp instead, with
-  ;; `rjd/mail-send-it', and leaving it puts this back.
+  ;; unconfigured.  A context sends with `rjd/mail-send-it' instead,
+  ;; which sends mail from a declared account through msmtp and hands
+  ;; any other back to this; leaving the context puts this back.
   (message-send-mail-function   'smtpmail-send-it)
 
   ;; Gmail keeps one message under many labels, and every synced folder

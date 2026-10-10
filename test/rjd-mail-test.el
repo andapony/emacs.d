@@ -81,7 +81,6 @@
   `(let ((user-mail-address "me@fastmail.example")
          (user-full-name "Me Myself")
          (message-send-mail-function 'smtpmail-send-it)
-         (rjd/mail-sendmail-command nil)
          (mu4e-sent-folder "/Sent")
          (mu4e-drafts-folder "/Drafts")
          (mu4e-trash-folder "/Trash")
@@ -306,7 +305,6 @@ is not set up for these accounts."
       (should (equal user-mail-address "me@fastmail.example"))
       (should (equal user-full-name "Me Myself"))
       (should (eq message-send-mail-function 'smtpmail-send-it))
-      (should (equal rjd/mail-sendmail-command nil))
       (should (equal mu4e-sent-folder "/Sent"))
       (should (equal mu4e-drafts-folder "/Drafts"))
       (should (equal mu4e-trash-folder "/Trash"))
@@ -347,31 +345,6 @@ is not set up for these accounts."
 
 ;;; Sending
 
-(ert-deftest rjd/mail-entering-gmail-sends-through-msmtp ()
-  (rjd/mail-test-needs-mu4e)
-  (rjd/mail-test-with-fastmail-defaults
-    (let ((rjd/mail-command-prefix nil))
-      (rjd/mail-test-enter
-       (car (rjd/mail-contexts (list rjd/mail-test-gmail))))
-      (should (eq message-send-mail-function #'rjd/mail-send-it))
-      (should (equal rjd/mail-sendmail-command
-                     '("msmtp" "-a" "gmail-test" "--read-envelope-from"))))))
-
-(ert-deftest rjd/mail-entering-sends-through-the-prefix ()
-  "The prefix in force on entering a context is the one msmtp runs behind.
-On the host it reaches the mail container; the -oi that message's own
-sendmail path puts before any extra argument must not land in it."
-  (rjd/mail-test-needs-mu4e)
-  (rjd/mail-test-with-fastmail-defaults
-    (let* ((rjd/mail-command-prefix nil)
-           (context (car (rjd/mail-contexts (list rjd/mail-test-other)))))
-      (setq rjd/mail-command-prefix '("docker" "exec" "-i" "mail"))
-      (rjd/mail-test-enter context)
-      (should (eq message-send-mail-function #'rjd/mail-send-it))
-      (should (equal rjd/mail-sendmail-command
-                     '("docker" "exec" "-i" "mail"
-                       "msmtp" "-a" "other" "--read-envelope-from"))))))
-
 (defun rjd/mail-test-file-string (file)
   "The contents of FILE."
   (with-temp-buffer
@@ -381,65 +354,120 @@ sendmail path puts before any extra argument must not land in it."
 (defun rjd/mail-test-send (command message)
   "Send MESSAGE with `rjd/mail-send-it', COMMAND standing in for msmtp.
 MESSAGE is as message-mode prepares it, headers and body divided by
-`mail-header-separator'.  COMMAND is a shell script; it runs as
-\"sh -c COMMAND sh exec -i mail msmtp -a gmail-test ...\", so its
-\"$@\" is the prefixed command line msmtp would get.  Returns the
-result of sending."
+`mail-header-separator'.  COMMAND is a shell script, put in
+`rjd/mail-command-prefix' in front of the other words of a prefix: it
+runs as \"sh -c COMMAND sh exec -i mail msmtp -a ACCOUNT ...\", so its
+\"$@\" is the prefixed command line msmtp would get.  Both test accounts
+are declared.  Returns the result of sending."
   (require 'sendmail)
-  (let ((rjd/mail-sendmail-command
-         (list "sh" "-c" command "sh"
-               "exec" "-i" "mail" "msmtp" "-a" "gmail-test"
-               "--read-envelope-from")))
+  (let ((rjd/mail-command-prefix (list "sh" "-c" command "sh"
+                                       "exec" "-i" "mail"))
+        (rjd/mail-accounts (list rjd/mail-test-gmail rjd/mail-test-other)))
     (with-temp-buffer
       (insert (format message mail-header-separator))
       (rjd/mail-send-it))))
 
+(defmacro rjd/mail-test-with-command-log (&rest body)
+  "Run BODY with `args' and `msg' naming files a stand-in msmtp writes.
+`log' is the shell script that does it, for `rjd/mail-test-send'."
+  (declare (indent 0))
+  `(let* ((dir (make-temp-file "rjd-mail-send" t))
+          (args (file-name-concat dir "args"))
+          (msg (file-name-concat dir "msg"))
+          (log (format "printf '%%s\\n' \"$@\" > %s; cat > %s"
+                       (shell-quote-argument args)
+                       (shell-quote-argument msg))))
+     (unwind-protect
+         (progn ,@body)
+       (delete-directory dir t))))
+
+(ert-deftest rjd/mail-entering-gmail-sends-through-rjd-mail ()
+  (rjd/mail-test-needs-mu4e)
+  (rjd/mail-test-with-fastmail-defaults
+    (rjd/mail-test-enter
+     (car (rjd/mail-contexts (list rjd/mail-test-gmail))))
+    (should (eq message-send-mail-function #'rjd/mail-send-it))))
+
 (ert-deftest rjd/mail-send-it-pipes-the-message-to-the-command ()
-  "The message reaches the command, which reads its recipients from it.
-Nothing comes between the command's own words, as message's sendmail
-path would put -oi after the program -- `docker -oi exec ...'."
-  (let* ((dir (make-temp-file "rjd-mail-send" t))
-         (args (file-name-concat dir "args"))
-         (msg (file-name-concat dir "msg")))
-    (unwind-protect
-        (progn
-          (rjd/mail-test-send
-           (format "printf '%%s\\n' \"$@\" > %s; cat > %s"
-                   (shell-quote-argument args) (shell-quote-argument msg))
-           "To: you@example.net\nSubject: Hi\n%s\nHello.\n")
-          (should (equal (rjd/mail-test-file-string args)
-                         (concat "exec\n-i\nmail\nmsmtp\n-a\ngmail-test\n"
-                                 "--read-envelope-from\n-t\n")))
-          (should (equal (rjd/mail-test-file-string msg)
-                         "To: you@example.net\nSubject: Hi\n\nHello.\n")))
-      (delete-directory dir t))))
+  "The message reaches msmtp for its From account, behind the prefix.
+msmtp reads the recipients from it.  Nothing comes between the
+command's own words, as message's sendmail path would put -oi after
+the program -- `docker -oi exec ...'."
+  (rjd/mail-test-with-command-log
+    (rjd/mail-test-send
+     log "From: Some One <someone@example.com>\nTo: you@example.net\nSubject: Hi\n%s\nHello.\n")
+    (should (equal (rjd/mail-test-file-string args)
+                   (concat "exec\n-i\nmail\nmsmtp\n-a\ngmail-test\n"
+                           "--read-envelope-from\n-t\n")))
+    (should (equal (rjd/mail-test-file-string msg)
+                   (concat "From: Some One <someone@example.com>\n"
+                           "To: you@example.net\nSubject: Hi\n\nHello.\n")))))
+
+(ert-deftest rjd/mail-send-it-uses-the-msmtp-account ()
+  "An account's own :msmtp-account names the msmtp account; else :name."
+  (rjd/mail-test-with-command-log
+    (let ((rjd/mail-test-other (append '(:msmtp-account "other-msmtp")
+                                       rjd/mail-test-other)))
+      (rjd/mail-test-send log "From: other@example.org\nTo: you@example.net\n%s\nHi.\n"))
+    (should (string-match-p "^-a\nother-msmtp\n"
+                            (rjd/mail-test-file-string args)))))
+
+(ert-deftest rjd/mail-send-it-sends-as-the-from-account-not-the-context ()
+  "A draft goes out as the account in its From, whatever context is current.
+Written in the Gmail context, sent after another context was entered,
+it still goes through Gmail's msmtp account."
+  (rjd/mail-test-needs-mu4e)
+  (rjd/mail-test-with-fastmail-defaults
+    (rjd/mail-test-with-command-log
+      (rjd/mail-test-enter
+       (rjd/mail-test-context
+        "other" (rjd/mail-contexts (list rjd/mail-test-gmail rjd/mail-test-other))))
+      (rjd/mail-test-send
+       log "From: Some One <Someone@Example.com>\nTo: you@example.net\n%s\nHi.\n")
+      (should (string-match-p "^-a\ngmail-test\n"
+                              (rjd/mail-test-file-string args))))))
+
+(ert-deftest rjd/mail-send-it-from-another-address-sends-as-the-default ()
+  "A message from no declared account goes out the default way.
+A C-x m draft begun before any context was entered has the Fastmail
+From, and message sends it with the global function, which entering a
+context made `rjd/mail-send-it'; it must reach smtpmail, not msmtp."
+  (rjd/mail-test-needs-mu4e)
+  (rjd/mail-test-with-fastmail-defaults
+    (rjd/mail-test-with-command-log
+      (let* ((sent nil)
+             (message-send-mail-function
+              (lambda () (setq sent (buffer-string)))))
+        (rjd/mail-test-enter
+         (car (rjd/mail-contexts (list rjd/mail-test-gmail))))
+        (rjd/mail-test-send
+         log "From: Me Myself <me@fastmail.example>\nTo: you@example.net\n%s\nHi.\n")
+        (should-not (file-exists-p args))
+        (should (equal sent (format "From: Me Myself <me@fastmail.example>\nTo: you@example.net\n%s\nHi.\n"
+                                    mail-header-separator)))))))
 
 (ert-deftest rjd/mail-send-it-resends-to-resent-to ()
   "A resend goes to the Resent-To addresses, not the original recipients."
-  (let ((args (make-temp-file "rjd-mail-send-args")))
-    (unwind-protect
-        (progn
-          (rjd/mail-test-send
-           (format "printf '%%s\\n' \"$@\" > %s; cat > /dev/null"
-                   (shell-quote-argument args))
-           (concat "Resent-To: A <a@example.net>, b@example.net\n"
-                   "To: you@example.net\n%s\nHello.\n"))
-          (should (string-suffix-p "--read-envelope-from\na@example.net\nb@example.net\n"
-                                   (rjd/mail-test-file-string args))))
-      (delete-file args))))
+  (rjd/mail-test-with-command-log
+    (rjd/mail-test-send
+     log (concat "Resent-To: A <a@example.net>, b@example.net\n"
+                 "From: someone@example.com\nTo: you@example.net\n%s\nHello.\n"))
+    (should (string-suffix-p "--read-envelope-from\na@example.net\nb@example.net\n"
+                             (rjd/mail-test-file-string args)))))
 
 (ert-deftest rjd/mail-send-it-reports-failure ()
   "A command that fails makes sending fail, with what it said."
   (let ((err (should-error
               (rjd/mail-test-send "cat > /dev/null; echo 'no token' >&2; exit 78"
-                                    "To: you@example.net\n%s\nHello.\n"))))
+                                  "From: someone@example.com\nTo: you@example.net\n%s\nHello.\n"))))
     (should (string-match-p "no token" (error-message-string err)))))
 
-(ert-deftest rjd/mail-send-it-needs-a-context ()
-  "Outside every context there is no account to send as."
-  (let ((rjd/mail-sendmail-command nil))
-    (with-temp-buffer
-      (should-error (rjd/mail-send-it)))))
+(ert-deftest rjd/mail-send-it-without-an-account-or-default ()
+  "From no declared account, outside every context, there is nothing to
+send with: no account, and no default saved to fall back on."
+  (let ((rjd/mail--saved nil))
+    (should-error (rjd/mail-test-send "cat > /dev/null"
+                                      "From: me@fastmail.example\n%s\nHi.\n"))))
 
 
 ;;; Junk
