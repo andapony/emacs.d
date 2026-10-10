@@ -670,6 +670,20 @@ traversing corrupts its iteration."
 
 (use-package org-capture
   :defer t
+  :preface
+  (defun rjd/org-capture-mail-link ()
+    "The link to the mail message capture started from, on a line of its own.
+For a `%(...)' at the end of a template: the result is a newline, the
+indentation of `%U' in this file's templates, and the link, or nil --
+which inserts nothing -- unless capture started from a message.  That
+is when the link org stored on the way in, `%a', is to a mu4e message:
+mu4e-org stores one from a message's view, or from its line in the
+headers.  Any other link, such as the file: one stored from a file
+buffer, is left out, as it was before this existed."
+    (let ((annotation (org-capture-get :annotation)))
+      (when (and (stringp annotation)
+                 (string-prefix-p "[[mu4e:msgid:" annotation))
+        (concat "\n  " annotation))))
   :custom
   (org-capture-templates
    '(("n" "New note (with Denote)" plain
@@ -693,10 +707,12 @@ traversing corrupts its iteration."
       "* %^{Task description} :%^{Tag|misc|meeting|review|code}:\n%U"
       :clock-in t :clock-keep t)
      ;; org-capture creates the "Cetos" heading at the end of the file if it
-     ;; is missing, so this needs no setup in projects.org.
+     ;; is missing, so this needs no setup in projects.org.  Captured from a
+     ;; mu4e message, the task links back to it; from anywhere else, the
+     ;; link line is absent rather than empty.
      ("c" "Cetos task" entry
       (file+headline "~/org-agenda/projects.org" "Cetos")
-      "* TODO %?\n  %U" :prepend nil :empty-lines 1)
+      "* TODO %?\n  %U%(rjd/org-capture-mail-link)" :prepend nil :empty-lines 1)
      )))
 
 ;; Settings for `org-icalendar-combine-agenda-files', which writes the
