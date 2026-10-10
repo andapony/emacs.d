@@ -88,32 +88,30 @@ rather than to fix it under pressure.
 ## Mail
 
 mu4e reads mail through `rjd-mail` (user-lisp), which turns the
-accounts declared in `private.el` as `rjd-mail-accounts` into mu4e
+accounts declared in `private.el` as `rjd/mail-accounts` into mu4e
 contexts.  Entering one sets the account's identity and folders and
 leaving it restores the global defaults -- the Fastmail identity and
 smtpmail -- so mail written outside mu4e is unchanged; with no account
 declared there are no contexts.  A context sends through msmtp with
-`rjd-mail-send-it`, not message's sendmail path, whose `-oi` would land
+`rjd/mail-send-it`, not message's sendmail path, whose `-oi` would land
 inside the prefix (`docker -oi exec ...`).  A context stays entered
 after mu4e quits, so message buffers outside mu4e get the default
 identity and smtpmail back buffer-locally, from `message-mode-hook`.  Every mail command (mbsync, msmtp,
-oama) is built with `rjd-mail-command`, which puts
-`rjd-mail-command-prefix` in front: nil inside `claude-dev`, the mail
+oama) is built with `rjd/mail-command`, which puts
+`rjd/mail-command-prefix` in front: nil inside `claude-dev`, the mail
 container's `docker exec -i mail` on the host.  The default is chosen
-when the package loads, by `rjd-mail-default-command-prefix`: the
+when the package loads, by `rjd/mail-default-command-prefix`: the
 container if Emacs is not itself in one and the `setup` playbook has
 written `~/.config/mail-container/` (the container's configuration,
 outside `~/projects`, so no agent can edit what runs beside the
 tokens); nil otherwise.  Declared accounts, and the calendar account,
-take effect only where `rjd-mail-available-p` says mail can run: where
+take effect only where `rjd/mail-available-p` says mail can run: where
 the prefix is set, or inside a container with `mbsync` on `exec-path`
 (`claude-dev` with the dev toolchain).  On leroy or bulldog Emacs
-starts as if none were declared; `rjd-mail-enabled` forces it either
+starts as if none were declared; `rjd/mail-enabled` forces it either
 way.  `private.el` only declares data; the decision stays here, under
 test.  On the Mac, mu and mu4e come from Homebrew,
-and mu4e's form puts Homebrew's site-lisp on `load-path`.  The package's symbols use the
-`rjd-mail-` prefix, not `rjd/`, because that interface was fixed for
-the calendar to build on.  `rjd-mail-mode` is opt-in, enabled from
+and mu4e's form puts Homebrew's site-lisp on `load-path`.   `rjd/mail-mode` is opt-in, enabled from
 mu4e's form in `init.el`.  ERT tests: `test/rjd-mail-test.el`.
 
 ## Calendar
@@ -123,7 +121,7 @@ has org-gcal fetch one account's calendar, read-only, into
 `~/org-agenda/gcal-gmail-personal.org`.  The account is set in
 `private.el` as `rjd/gcal-account`; without it, or where mail cannot
 run (see Mail), nothing is fetched and there is no timer.  The
-token comes from oama, through `rjd-mail-command`, by `:around` advice
+token comes from oama, through `rjd/mail-command`, by `:around` advice
 on oauth2-auto's `oauth2-auto-access-token` -- an upgrade of org-gcal or
 oauth2-auto can break that silently, the calendar simply no longer
 updating.  **If the calendar disappears from the agenda, that advice is

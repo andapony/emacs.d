@@ -54,16 +54,16 @@
 ;; Mail can run, for every test that does not say otherwise: the tests
 ;; are about what declared accounts do where they take effect, and the
 ;; machine running them need not have the mail tools.
-(setq rjd-mail-enabled t)
+(setq rjd/mail-enabled t)
 
-(defconst rjd-mail-tests--gmail
+(defconst rjd/mail-test-gmail
   '(:name "gmail-test"
     :address "someone@example.com"
     :full-name "Some One"
     :maildir "/gmail-test")
   "A Gmail account declared with only the required keys.")
 
-(defconst rjd-mail-tests--other
+(defconst rjd/mail-test-other
   '(:name "other"
     :address "other@example.org"
     :full-name "Other Person"
@@ -75,53 +75,53 @@
     :mbsync-group "other-group")
   "An account that overrides every default.")
 
-(defmacro rjd-mail-tests--with-fastmail-defaults (&rest body)
+(defmacro rjd/mail-test-with-fastmail-defaults (&rest body)
   "Run BODY with the global mail settings as the Fastmail default."
   (declare (indent 0))
   `(let ((user-mail-address "me@fastmail.example")
          (user-full-name "Me Myself")
          (message-send-mail-function 'smtpmail-send-it)
-         (rjd-mail-sendmail-command nil)
+         (rjd/mail-sendmail-command nil)
          (mu4e-sent-folder "/Sent")
          (mu4e-drafts-folder "/Drafts")
          (mu4e-trash-folder "/Trash")
          (mu4e-refile-folder "/Archive")
          (mu4e-sent-messages-behavior 'sent)
          (mu4e-trash-without-flag nil)
-         (rjd-mail--saved nil))
+         (rjd/mail--saved nil))
      ,@body))
 
-(defun rjd-mail-tests--context (name contexts)
+(defun rjd/mail-test-context (name contexts)
   "The context called NAME among CONTEXTS."
   (seq-find (lambda (c) (equal (mu4e-context-name c) name)) contexts))
 
-(defun rjd-mail-tests--enter (context)
+(defun rjd/mail-test-enter (context)
   "Enter CONTEXT the way `mu4e-context-switch' does."
   (when (mu4e-context-enter-func context)
     (funcall (mu4e-context-enter-func context)))
   (dolist (cell (mu4e-context-vars context))
     (set (car cell) (cdr cell))))
 
-(defun rjd-mail-tests--leave (context)
+(defun rjd/mail-test-leave (context)
   "Leave CONTEXT the way `mu4e-context-switch' does."
   (when (mu4e-context-leave-func context)
     (funcall (mu4e-context-leave-func context))))
 
-(defmacro rjd-mail-tests--needs-mu4e ()
+(defmacro rjd/mail-test-needs-mu4e ()
   "Skip the current test when mu4e's elisp is not installed."
   '(skip-unless (locate-library "mu4e-context")))
 
 
 ;;; The mail command prefix
 
-(ert-deftest rjd-mail-command-without-prefix ()
-  (let ((rjd-mail-command-prefix nil))
-    (should (equal (rjd-mail-command "mbsync" "gmail-test")
+(ert-deftest rjd/mail-command-without-prefix ()
+  (let ((rjd/mail-command-prefix nil))
+    (should (equal (rjd/mail-command "mbsync" "gmail-test")
                    '("mbsync" "gmail-test")))))
 
-(ert-deftest rjd-mail-command-with-prefix ()
-  (let ((rjd-mail-command-prefix '("docker" "exec" "-i" "mail")))
-    (should (equal (rjd-mail-command "mbsync" "gmail-test")
+(ert-deftest rjd/mail-command-with-prefix ()
+  (let ((rjd/mail-command-prefix '("docker" "exec" "-i" "mail")))
+    (should (equal (rjd/mail-command "mbsync" "gmail-test")
                    '("docker" "exec" "-i" "mail" "mbsync" "gmail-test")))))
 
 
@@ -129,7 +129,7 @@
 
 ;;; Choosing the prefix for this machine
 
-(defmacro rjd-mail-tests--on-machine (spec &rest body)
+(defmacro rjd/mail-test-on-machine (spec &rest body)
   "Run BODY on a made-up machine described by SPEC.
 SPEC is a plist: with :inside-container non-nil the machine is a
 container (its marker file exists); with :mail-container non-nil the
@@ -138,8 +138,8 @@ host has the mail container's configuration directory."
   `(let* ((root (make-temp-file "rjd-mail-machine" t))
           (marker (expand-file-name "dockerenv" root))
           (config (expand-file-name "mail-container" root))
-          (rjd-mail-container-marker-files (list marker))
-          (rjd-mail-container-directory config))
+          (rjd/mail-container-marker-files (list marker))
+          (rjd/mail-container-directory config))
      (unwind-protect
          (progn
            (when (plist-get ',spec :inside-container)
@@ -149,32 +149,32 @@ host has the mail container's configuration directory."
            ,@body)
        (delete-directory root t))))
 
-(ert-deftest rjd-mail-default-prefix-on-a-host-with-the-mail-container ()
+(ert-deftest rjd/mail-default-prefix-on-a-host-with-the-mail-container ()
   "On the host the mail commands go into the mail container."
-  (rjd-mail-tests--on-machine (:mail-container t)
-    (should (equal (rjd-mail-default-command-prefix)
+  (rjd/mail-test-on-machine (:mail-container t)
+    (should (equal (rjd/mail-default-command-prefix)
                    '("docker" "exec" "-i" "mail")))))
 
-(ert-deftest rjd-mail-default-prefix-inside-a-container ()
+(ert-deftest rjd/mail-default-prefix-inside-a-container ()
   "Inside claude-dev the tools run directly, whatever else is there."
-  (rjd-mail-tests--on-machine (:inside-container t :mail-container t)
-    (should-not (rjd-mail-default-command-prefix))))
+  (rjd/mail-test-on-machine (:inside-container t :mail-container t)
+    (should-not (rjd/mail-default-command-prefix))))
 
-(ert-deftest rjd-mail-default-prefix-on-a-host-without-the-mail-container ()
+(ert-deftest rjd/mail-default-prefix-on-a-host-without-the-mail-container ()
   "A machine without the mail container -- leroy, say -- has no prefix."
-  (rjd-mail-tests--on-machine ()
-    (should-not (rjd-mail-default-command-prefix))))
+  (rjd/mail-test-on-machine ()
+    (should-not (rjd/mail-default-command-prefix))))
 
-(ert-deftest rjd-mail-default-prefix-names-the-container ()
-  (rjd-mail-tests--on-machine (:mail-container t)
-    (let ((rjd-mail-container-name "post"))
-      (should (equal (rjd-mail-default-command-prefix)
+(ert-deftest rjd/mail-default-prefix-names-the-container ()
+  (rjd/mail-test-on-machine (:mail-container t)
+    (let ((rjd/mail-container-name "post"))
+      (should (equal (rjd/mail-default-command-prefix)
                      '("docker" "exec" "-i" "post"))))))
 
 
 ;;; Whether mail can run on this machine
 
-(defmacro rjd-mail-tests--with-toolchain (programs &rest body)
+(defmacro rjd/mail-test-with-toolchain (programs &rest body)
   "Run BODY with only PROGRAMS, a list of names, on `exec-path'."
   (declare (indent 1))
   `(let* ((bin (make-temp-file "rjd-mail-bin" t))
@@ -188,93 +188,93 @@ host has the mail container's configuration directory."
            ,@body)
        (delete-directory bin t))))
 
-(ert-deftest rjd-mail-available-on-the-host-with-the-mail-container ()
+(ert-deftest rjd/mail-available-on-the-host-with-the-mail-container ()
   "The iMac: the tools are in the mail container, so none on the host."
-  (rjd-mail-tests--on-machine (:mail-container t)
-    (rjd-mail-tests--with-toolchain nil
-      (let ((rjd-mail-enabled 'auto)
-            (rjd-mail-command-prefix (rjd-mail-default-command-prefix)))
-        (should (rjd-mail-available-p))))))
+  (rjd/mail-test-on-machine (:mail-container t)
+    (rjd/mail-test-with-toolchain nil
+      (let ((rjd/mail-enabled 'auto)
+            (rjd/mail-command-prefix (rjd/mail-default-command-prefix)))
+        (should (rjd/mail-available-p))))))
 
-(ert-deftest rjd-mail-available-in-a-container-with-the-dev-toolchain ()
+(ert-deftest rjd/mail-available-in-a-container-with-the-dev-toolchain ()
   "claude-dev, with mbsync installed for development."
-  (rjd-mail-tests--on-machine (:inside-container t)
-    (rjd-mail-tests--with-toolchain '("mbsync")
-      (let ((rjd-mail-enabled 'auto)
-            (rjd-mail-command-prefix (rjd-mail-default-command-prefix)))
-        (should (rjd-mail-available-p))))))
+  (rjd/mail-test-on-machine (:inside-container t)
+    (rjd/mail-test-with-toolchain '("mbsync")
+      (let ((rjd/mail-enabled 'auto)
+            (rjd/mail-command-prefix (rjd/mail-default-command-prefix)))
+        (should (rjd/mail-available-p))))))
 
-(ert-deftest rjd-mail-unavailable-in-a-container-without-the-toolchain ()
-  (rjd-mail-tests--on-machine (:inside-container t)
-    (rjd-mail-tests--with-toolchain nil
-      (let ((rjd-mail-enabled 'auto)
-            (rjd-mail-command-prefix (rjd-mail-default-command-prefix)))
-        (should-not (rjd-mail-available-p))))))
+(ert-deftest rjd/mail-unavailable-in-a-container-without-the-toolchain ()
+  (rjd/mail-test-on-machine (:inside-container t)
+    (rjd/mail-test-with-toolchain nil
+      (let ((rjd/mail-enabled 'auto)
+            (rjd/mail-command-prefix (rjd/mail-default-command-prefix)))
+        (should-not (rjd/mail-available-p))))))
 
-(ert-deftest rjd-mail-unavailable-on-a-host-without-the-mail-container ()
+(ert-deftest rjd/mail-unavailable-on-a-host-without-the-mail-container ()
   "leroy or bulldog: no mail container, and their own mbsync, if any,
 is not set up for these accounts."
-  (rjd-mail-tests--on-machine ()
-    (rjd-mail-tests--with-toolchain '("mbsync")
-      (let ((rjd-mail-enabled 'auto)
-            (rjd-mail-command-prefix (rjd-mail-default-command-prefix)))
-        (should-not (rjd-mail-available-p))))))
+  (rjd/mail-test-on-machine ()
+    (rjd/mail-test-with-toolchain '("mbsync")
+      (let ((rjd/mail-enabled 'auto)
+            (rjd/mail-command-prefix (rjd/mail-default-command-prefix)))
+        (should-not (rjd/mail-available-p))))))
 
-(ert-deftest rjd-mail-available-when-a-prefix-is-set-by-hand ()
+(ert-deftest rjd/mail-available-when-a-prefix-is-set-by-hand ()
   "A prefix set in private.el says where the tools are."
-  (rjd-mail-tests--on-machine ()
-    (rjd-mail-tests--with-toolchain nil
-      (let ((rjd-mail-enabled 'auto)
-            (rjd-mail-command-prefix '("ssh" "mailhost")))
-        (should (rjd-mail-available-p))))))
+  (rjd/mail-test-on-machine ()
+    (rjd/mail-test-with-toolchain nil
+      (let ((rjd/mail-enabled 'auto)
+            (rjd/mail-command-prefix '("ssh" "mailhost")))
+        (should (rjd/mail-available-p))))))
 
-(ert-deftest rjd-mail-enabled-overrides-the-machine ()
-  (rjd-mail-tests--on-machine (:mail-container t)
-    (let ((rjd-mail-command-prefix (rjd-mail-default-command-prefix)))
-      (let ((rjd-mail-enabled nil))
-        (should-not (rjd-mail-available-p)))))
-  (rjd-mail-tests--on-machine ()
-    (let ((rjd-mail-command-prefix nil)
-          (rjd-mail-enabled t))
-      (should (rjd-mail-available-p)))))
+(ert-deftest rjd/mail-enabled-overrides-the-machine ()
+  (rjd/mail-test-on-machine (:mail-container t)
+    (let ((rjd/mail-command-prefix (rjd/mail-default-command-prefix)))
+      (let ((rjd/mail-enabled nil))
+        (should-not (rjd/mail-available-p)))))
+  (rjd/mail-test-on-machine ()
+    (let ((rjd/mail-command-prefix nil)
+          (rjd/mail-enabled t))
+      (should (rjd/mail-available-p)))))
 
-(ert-deftest rjd-mail-get-mail-command-without-prefix ()
-  (let ((rjd-mail-command-prefix nil)
-        (rjd-mail-accounts (list rjd-mail-tests--gmail rjd-mail-tests--other)))
-    (should (equal (rjd-mail-get-mail-command)
+(ert-deftest rjd/mail-get-mail-command-without-prefix ()
+  (let ((rjd/mail-command-prefix nil)
+        (rjd/mail-accounts (list rjd/mail-test-gmail rjd/mail-test-other)))
+    (should (equal (rjd/mail-get-mail-command)
                    "mbsync gmail-test other-group"))))
 
-(ert-deftest rjd-mail-get-mail-command-with-prefix ()
-  (let ((rjd-mail-command-prefix '("docker" "exec" "-i" "mail box"))
-        (rjd-mail-accounts (list rjd-mail-tests--gmail)))
-    (should (equal (rjd-mail-get-mail-command)
+(ert-deftest rjd/mail-get-mail-command-with-prefix ()
+  (let ((rjd/mail-command-prefix '("docker" "exec" "-i" "mail box"))
+        (rjd/mail-accounts (list rjd/mail-test-gmail)))
+    (should (equal (rjd/mail-get-mail-command)
                    "docker exec -i mail\\ box mbsync gmail-test"))))
 
-(ert-deftest rjd-mail-get-mail-command-without-accounts ()
+(ert-deftest rjd/mail-get-mail-command-without-accounts ()
   "With nothing declared there is nothing to fetch, only to index."
-  (let ((rjd-mail-command-prefix '("docker" "exec" "-i" "mail"))
-        (rjd-mail-accounts nil))
-    (should (equal (rjd-mail-get-mail-command) "true"))))
+  (let ((rjd/mail-command-prefix '("docker" "exec" "-i" "mail"))
+        (rjd/mail-accounts nil))
+    (should (equal (rjd/mail-get-mail-command) "true"))))
 
 
 ;;; Accounts to contexts
 
-(ert-deftest rjd-mail-contexts-one-per-account ()
-  (rjd-mail-tests--needs-mu4e)
-  (let ((contexts (rjd-mail-contexts
-                   (list rjd-mail-tests--gmail rjd-mail-tests--other))))
+(ert-deftest rjd/mail-contexts-one-per-account ()
+  (rjd/mail-test-needs-mu4e)
+  (let ((contexts (rjd/mail-contexts
+                   (list rjd/mail-test-gmail rjd/mail-test-other))))
     (should (equal (mapcar #'mu4e-context-name contexts)
                    '("gmail-test" "other")))))
 
-(ert-deftest rjd-mail-contexts-empty ()
+(ert-deftest rjd/mail-contexts-empty ()
   "No accounts gives no contexts, and needs nothing from mu4e."
-  (should (equal (rjd-mail-contexts nil) nil)))
+  (should (equal (rjd/mail-contexts nil) nil)))
 
-(ert-deftest rjd-mail-entering-gmail-sets-identity-folders-and-sent ()
-  (rjd-mail-tests--needs-mu4e)
-  (rjd-mail-tests--with-fastmail-defaults
-    (rjd-mail-tests--enter
-     (car (rjd-mail-contexts (list rjd-mail-tests--gmail))))
+(ert-deftest rjd/mail-entering-gmail-sets-identity-folders-and-sent ()
+  (rjd/mail-test-needs-mu4e)
+  (rjd/mail-test-with-fastmail-defaults
+    (rjd/mail-test-enter
+     (car (rjd/mail-contexts (list rjd/mail-test-gmail))))
     (should (equal user-mail-address "someone@example.com"))
     (should (equal user-full-name "Some One"))
     (should (equal mu4e-sent-folder "/gmail-test/sent"))
@@ -286,27 +286,27 @@ is not set up for these accounts."
     ;; mbsync would expunge it instead, and Gmail would only archive it.
     (should (eq mu4e-trash-without-flag t))))
 
-(ert-deftest rjd-mail-entering-sets-declared-folders-and-sent ()
-  (rjd-mail-tests--needs-mu4e)
-  (rjd-mail-tests--with-fastmail-defaults
-    (rjd-mail-tests--enter
-     (car (rjd-mail-contexts (list rjd-mail-tests--other))))
+(ert-deftest rjd/mail-entering-sets-declared-folders-and-sent ()
+  (rjd/mail-test-needs-mu4e)
+  (rjd/mail-test-with-fastmail-defaults
+    (rjd/mail-test-enter
+     (car (rjd/mail-contexts (list rjd/mail-test-other))))
     (should (equal user-mail-address "other@example.org"))
     (should (equal mu4e-sent-folder "/other/Sent"))
     (should (equal mu4e-refile-folder "/other/Archive"))
     (should (eq mu4e-sent-messages-behavior 'sent))
     (should (eq mu4e-trash-without-flag nil))))
 
-(ert-deftest rjd-mail-leaving-restores-fastmail-default ()
-  (rjd-mail-tests--needs-mu4e)
-  (rjd-mail-tests--with-fastmail-defaults
-    (let ((context (car (rjd-mail-contexts (list rjd-mail-tests--gmail)))))
-      (rjd-mail-tests--enter context)
-      (rjd-mail-tests--leave context)
+(ert-deftest rjd/mail-leaving-restores-fastmail-default ()
+  (rjd/mail-test-needs-mu4e)
+  (rjd/mail-test-with-fastmail-defaults
+    (let ((context (car (rjd/mail-contexts (list rjd/mail-test-gmail)))))
+      (rjd/mail-test-enter context)
+      (rjd/mail-test-leave context)
       (should (equal user-mail-address "me@fastmail.example"))
       (should (equal user-full-name "Me Myself"))
       (should (eq message-send-mail-function 'smtpmail-send-it))
-      (should (equal rjd-mail-sendmail-command nil))
+      (should (equal rjd/mail-sendmail-command nil))
       (should (equal mu4e-sent-folder "/Sent"))
       (should (equal mu4e-drafts-folder "/Drafts"))
       (should (equal mu4e-trash-folder "/Trash"))
@@ -314,27 +314,27 @@ is not set up for these accounts."
       (should (eq mu4e-sent-messages-behavior 'sent))
       (should (eq mu4e-trash-without-flag nil)))))
 
-(ert-deftest rjd-mail-switching-between-accounts-then-leaving ()
+(ert-deftest rjd/mail-switching-between-accounts-then-leaving ()
   "Switching from one account to another still ends on the default."
-  (rjd-mail-tests--needs-mu4e)
-  (rjd-mail-tests--with-fastmail-defaults
-    (let* ((contexts (rjd-mail-contexts
-                      (list rjd-mail-tests--gmail rjd-mail-tests--other)))
-           (gmail (rjd-mail-tests--context "gmail-test" contexts))
-           (other (rjd-mail-tests--context "other" contexts)))
-      (rjd-mail-tests--enter gmail)
-      (rjd-mail-tests--leave gmail)
-      (rjd-mail-tests--enter other)
+  (rjd/mail-test-needs-mu4e)
+  (rjd/mail-test-with-fastmail-defaults
+    (let* ((contexts (rjd/mail-contexts
+                      (list rjd/mail-test-gmail rjd/mail-test-other)))
+           (gmail (rjd/mail-test-context "gmail-test" contexts))
+           (other (rjd/mail-test-context "other" contexts)))
+      (rjd/mail-test-enter gmail)
+      (rjd/mail-test-leave gmail)
+      (rjd/mail-test-enter other)
       (should (equal user-mail-address "other@example.org"))
-      (rjd-mail-tests--leave other)
+      (rjd/mail-test-leave other)
       (should (equal user-mail-address "me@fastmail.example"))
       (should (eq mu4e-sent-messages-behavior 'sent)))))
 
-(ert-deftest rjd-mail-context-matches-its-own-mail ()
-  (rjd-mail-tests--needs-mu4e)
-  (let* ((contexts (rjd-mail-contexts
-                    (list rjd-mail-tests--gmail rjd-mail-tests--other)))
-         (gmail (rjd-mail-tests--context "gmail-test" contexts))
+(ert-deftest rjd/mail-context-matches-its-own-mail ()
+  (rjd/mail-test-needs-mu4e)
+  (let* ((contexts (rjd/mail-contexts
+                    (list rjd/mail-test-gmail rjd/mail-test-other)))
+         (gmail (rjd/mail-test-context "gmail-test" contexts))
          (matches (lambda (msg) (funcall (mu4e-context-match-func gmail) msg))))
     (should (funcall matches '(:maildir "/gmail-test/inbox")))
     (should (funcall matches
@@ -347,54 +347,54 @@ is not set up for these accounts."
 
 ;;; Sending
 
-(ert-deftest rjd-mail-entering-gmail-sends-through-msmtp ()
-  (rjd-mail-tests--needs-mu4e)
-  (rjd-mail-tests--with-fastmail-defaults
-    (let ((rjd-mail-command-prefix nil))
-      (rjd-mail-tests--enter
-       (car (rjd-mail-contexts (list rjd-mail-tests--gmail))))
-      (should (eq message-send-mail-function #'rjd-mail-send-it))
-      (should (equal rjd-mail-sendmail-command
+(ert-deftest rjd/mail-entering-gmail-sends-through-msmtp ()
+  (rjd/mail-test-needs-mu4e)
+  (rjd/mail-test-with-fastmail-defaults
+    (let ((rjd/mail-command-prefix nil))
+      (rjd/mail-test-enter
+       (car (rjd/mail-contexts (list rjd/mail-test-gmail))))
+      (should (eq message-send-mail-function #'rjd/mail-send-it))
+      (should (equal rjd/mail-sendmail-command
                      '("msmtp" "-a" "gmail-test" "--read-envelope-from"))))))
 
-(ert-deftest rjd-mail-entering-sends-through-the-prefix ()
+(ert-deftest rjd/mail-entering-sends-through-the-prefix ()
   "The prefix in force on entering a context is the one msmtp runs behind.
 On the host it reaches the mail container; the -oi that message's own
 sendmail path puts before any extra argument must not land in it."
-  (rjd-mail-tests--needs-mu4e)
-  (rjd-mail-tests--with-fastmail-defaults
-    (let* ((rjd-mail-command-prefix nil)
-           (context (car (rjd-mail-contexts (list rjd-mail-tests--other)))))
-      (setq rjd-mail-command-prefix '("docker" "exec" "-i" "mail"))
-      (rjd-mail-tests--enter context)
-      (should (eq message-send-mail-function #'rjd-mail-send-it))
-      (should (equal rjd-mail-sendmail-command
+  (rjd/mail-test-needs-mu4e)
+  (rjd/mail-test-with-fastmail-defaults
+    (let* ((rjd/mail-command-prefix nil)
+           (context (car (rjd/mail-contexts (list rjd/mail-test-other)))))
+      (setq rjd/mail-command-prefix '("docker" "exec" "-i" "mail"))
+      (rjd/mail-test-enter context)
+      (should (eq message-send-mail-function #'rjd/mail-send-it))
+      (should (equal rjd/mail-sendmail-command
                      '("docker" "exec" "-i" "mail"
                        "msmtp" "-a" "other" "--read-envelope-from"))))))
 
-(defun rjd-mail-tests--file-string (file)
+(defun rjd/mail-test-file-string (file)
   "The contents of FILE."
   (with-temp-buffer
     (insert-file-contents file)
     (buffer-string)))
 
-(defun rjd-mail-tests--send (command message)
-  "Send MESSAGE with `rjd-mail-send-it', COMMAND standing in for msmtp.
+(defun rjd/mail-test-send (command message)
+  "Send MESSAGE with `rjd/mail-send-it', COMMAND standing in for msmtp.
 MESSAGE is as message-mode prepares it, headers and body divided by
 `mail-header-separator'.  COMMAND is a shell script; it runs as
 \"sh -c COMMAND sh exec -i mail msmtp -a gmail-test ...\", so its
 \"$@\" is the prefixed command line msmtp would get.  Returns the
 result of sending."
   (require 'sendmail)
-  (let ((rjd-mail-sendmail-command
+  (let ((rjd/mail-sendmail-command
          (list "sh" "-c" command "sh"
                "exec" "-i" "mail" "msmtp" "-a" "gmail-test"
                "--read-envelope-from")))
     (with-temp-buffer
       (insert (format message mail-header-separator))
-      (rjd-mail-send-it))))
+      (rjd/mail-send-it))))
 
-(ert-deftest rjd-mail-send-it-pipes-the-message-to-the-command ()
+(ert-deftest rjd/mail-send-it-pipes-the-message-to-the-command ()
   "The message reaches the command, which reads its recipients from it.
 Nothing comes between the command's own words, as message's sendmail
 path would put -oi after the program -- `docker -oi exec ...'."
@@ -403,74 +403,74 @@ path would put -oi after the program -- `docker -oi exec ...'."
          (msg (file-name-concat dir "msg")))
     (unwind-protect
         (progn
-          (rjd-mail-tests--send
+          (rjd/mail-test-send
            (format "printf '%%s\\n' \"$@\" > %s; cat > %s"
                    (shell-quote-argument args) (shell-quote-argument msg))
            "To: you@example.net\nSubject: Hi\n%s\nHello.\n")
-          (should (equal (rjd-mail-tests--file-string args)
+          (should (equal (rjd/mail-test-file-string args)
                          (concat "exec\n-i\nmail\nmsmtp\n-a\ngmail-test\n"
                                  "--read-envelope-from\n-t\n")))
-          (should (equal (rjd-mail-tests--file-string msg)
+          (should (equal (rjd/mail-test-file-string msg)
                          "To: you@example.net\nSubject: Hi\n\nHello.\n")))
       (delete-directory dir t))))
 
-(ert-deftest rjd-mail-send-it-resends-to-resent-to ()
+(ert-deftest rjd/mail-send-it-resends-to-resent-to ()
   "A resend goes to the Resent-To addresses, not the original recipients."
   (let ((args (make-temp-file "rjd-mail-send-args")))
     (unwind-protect
         (progn
-          (rjd-mail-tests--send
+          (rjd/mail-test-send
            (format "printf '%%s\\n' \"$@\" > %s; cat > /dev/null"
                    (shell-quote-argument args))
            (concat "Resent-To: A <a@example.net>, b@example.net\n"
                    "To: you@example.net\n%s\nHello.\n"))
           (should (string-suffix-p "--read-envelope-from\na@example.net\nb@example.net\n"
-                                   (rjd-mail-tests--file-string args))))
+                                   (rjd/mail-test-file-string args))))
       (delete-file args))))
 
-(ert-deftest rjd-mail-send-it-reports-failure ()
+(ert-deftest rjd/mail-send-it-reports-failure ()
   "A command that fails makes sending fail, with what it said."
   (let ((err (should-error
-              (rjd-mail-tests--send "cat > /dev/null; echo 'no token' >&2; exit 78"
+              (rjd/mail-test-send "cat > /dev/null; echo 'no token' >&2; exit 78"
                                     "To: you@example.net\n%s\nHello.\n"))))
     (should (string-match-p "no token" (error-message-string err)))))
 
-(ert-deftest rjd-mail-send-it-needs-a-context ()
+(ert-deftest rjd/mail-send-it-needs-a-context ()
   "Outside every context there is no account to send as."
-  (let ((rjd-mail-sendmail-command nil))
+  (let ((rjd/mail-sendmail-command nil))
     (with-temp-buffer
-      (should-error (rjd-mail-send-it)))))
+      (should-error (rjd/mail-send-it)))))
 
 
 ;;; Junk
 
-(ert-deftest rjd-mail-without-junk-excludes-spam-and-trash ()
-  (let ((rjd-mail-accounts (list rjd-mail-tests--gmail rjd-mail-tests--other)))
-    (should (equal (rjd-mail-without-junk "flag:unread")
+(ert-deftest rjd/mail-without-junk-excludes-spam-and-trash ()
+  (let ((rjd/mail-accounts (list rjd/mail-test-gmail rjd/mail-test-other)))
+    (should (equal (rjd/mail-without-junk "flag:unread")
                    (concat "(flag:unread) AND NOT (maildir:/gmail-test/spam"
                            " OR maildir:/gmail-test/trash"
                            " OR maildir:/other/Junk OR maildir:/other/Trash)")))))
 
-(ert-deftest rjd-mail-without-junk-without-accounts ()
-  (let ((rjd-mail-accounts nil))
-    (should (equal (rjd-mail-without-junk "flag:unread") "flag:unread"))))
+(ert-deftest rjd/mail-without-junk-without-accounts ()
+  (let ((rjd/mail-accounts nil))
+    (should (equal (rjd/mail-without-junk "flag:unread") "flag:unread"))))
 
 
 ;;; Flags on unread mail
 
-(defun rjd-mail-tests--maildir-files (root)
+(defun rjd/mail-test-maildir-files (root)
   "The files under ROOT, relative to it, sorted."
   (sort (mapcar (lambda (file) (file-relative-name file root))
                 (directory-files-recursively root ""))
         #'string<))
 
-(ert-deftest rjd-mail-file-flagged-new-moves-flagged-unread-to-cur ()
+(ert-deftest rjd/mail-file-flagged-new-moves-flagged-unread-to-cur ()
   "An unread starred message must reach cur/, or mu drops its star.
 mbsync files unread mail in new/ with its flags in the name; mu reads
 anything in new/ as New alone, so marking it read writes `:2,S' and the
 next sync removes Gmail's Starred label (#18)."
   (let* ((root (make-temp-file "rjd-mail-test-" t))
-         (rjd-mail-accounts (list rjd-mail-tests--gmail)))
+         (rjd/mail-accounts (list rjd/mail-test-gmail)))
     (unwind-protect
         (progn
           (dolist (dir '("inbox" "all"))
@@ -482,8 +482,8 @@ next sync removes Gmail's Starred label (#18)."
                           "inbox/new/3.h"            ; no info at all
                           "inbox/cur/4.h,U=4:2,FS")) ; read already
             (write-region "" nil (format "%s/gmail-test/%s" root file)))
-          (rjd-mail-file-flagged-new root)
-          (should (equal (rjd-mail-tests--maildir-files root)
+          (rjd/mail-file-flagged-new root)
+          (should (equal (rjd/mail-test-maildir-files root)
                          '("gmail-test/all/cur/1.h,U=7:2,FR"
                            "gmail-test/inbox/cur/1.h,U=1:2,F"
                            "gmail-test/inbox/cur/4.h,U=4:2,FS"
@@ -491,47 +491,47 @@ next sync removes Gmail's Starred label (#18)."
                            "gmail-test/inbox/new/3.h"))))
       (delete-directory root t))))
 
-(ert-deftest rjd-mail-file-flagged-new-leaves-other-maildirs ()
+(ert-deftest rjd/mail-file-flagged-new-leaves-other-maildirs ()
   "Only the declared accounts' mail is touched."
   (let* ((root (make-temp-file "rjd-mail-test-" t))
-         (rjd-mail-accounts (list rjd-mail-tests--gmail)))
+         (rjd/mail-accounts (list rjd/mail-test-gmail)))
     (unwind-protect
         (progn
           (make-directory (format "%s/fastmail/INBOX/new" root) t)
           (make-directory (format "%s/fastmail/INBOX/cur" root) t)
           (write-region "" nil (format "%s/fastmail/INBOX/new/1.h:2,F" root))
-          (rjd-mail-file-flagged-new root)
-          (should (equal (rjd-mail-tests--maildir-files root)
+          (rjd/mail-file-flagged-new root)
+          (should (equal (rjd/mail-test-maildir-files root)
                          '("fastmail/INBOX/new/1.h:2,F"))))
       (delete-directory root t))))
 
 
 ;;; The mode
 
-(ert-deftest rjd-mail-mode-installs-and-restores ()
-  (rjd-mail-tests--needs-mu4e)
-  (let ((rjd-mail-accounts (list rjd-mail-tests--gmail))
+(ert-deftest rjd/mail-mode-installs-and-restores ()
+  (rjd/mail-test-needs-mu4e)
+  (let ((rjd/mail-accounts (list rjd/mail-test-gmail))
         (mu4e-contexts nil)
         (mu4e-get-mail-command "true")
-        (rjd-mail-mode nil)
-        (rjd-mail--before-mode nil))
-    (rjd-mail-mode 1)
+        (rjd/mail-mode nil)
+        (rjd/mail--before-mode nil))
+    (rjd/mail-mode 1)
     (should (equal (mapcar #'mu4e-context-name mu4e-contexts) '("gmail-test")))
-    (should (eq mu4e-get-mail-command #'rjd-mail-get-mail-command))
-    (rjd-mail-mode -1)
+    (should (eq mu4e-get-mail-command #'rjd/mail-get-mail-command))
+    (rjd/mail-mode -1)
     (should (equal mu4e-contexts nil))
     (should (equal mu4e-get-mail-command "true"))))
 
-(ert-deftest rjd-mail-mode-files-flagged-new-before-indexing ()
+(ert-deftest rjd/mail-mode-files-flagged-new-before-indexing ()
   "Every index -- after a fetch, or on its own -- sees the flags (#18)."
-  (rjd-mail-tests--needs-mu4e)
+  (rjd/mail-test-needs-mu4e)
   (require 'mu4e-update)
   (let* ((root (make-temp-file "rjd-mail-test-" t))
-         (rjd-mail-accounts (list rjd-mail-tests--gmail))
+         (rjd/mail-accounts (list rjd/mail-test-gmail))
          (mu4e-contexts nil)
          (mu4e-get-mail-command "true")
-         (rjd-mail-mode nil)
-         (rjd-mail--before-mode nil)
+         (rjd/mail-mode nil)
+         (rjd/mail--before-mode nil)
          indexed-files)
     (unwind-protect
         (progn
@@ -543,10 +543,10 @@ next sync removes Gmail's Starred label (#18)."
                     ((symbol-function 'mu4e--server-index)
                      (lambda (&rest _)
                        (setq indexed-files
-                             (rjd-mail-tests--maildir-files root)))))
-            (rjd-mail-mode 1)
+                             (rjd/mail-test-maildir-files root)))))
+            (rjd/mail-mode 1)
             (mu4e-update-index)
-            (rjd-mail-mode -1)
+            (rjd/mail-mode -1)
             (should (equal indexed-files
                            '("gmail-test/inbox/cur/1.h,U=1:2,F")))
             ;; Off, the mode leaves indexing alone.
@@ -555,55 +555,55 @@ next sync removes Gmail's Starred label (#18)."
             (mu4e-update-index)
             (should (equal indexed-files
                            '("gmail-test/inbox/new/1.h,U=1:2,F")))))
-      (rjd-mail-mode -1)
+      (rjd/mail-mode -1)
       (delete-directory root t))))
 
-(ert-deftest rjd-mail-mode-without-accounts ()
+(ert-deftest rjd/mail-mode-without-accounts ()
   "No accounts: the mode turns on cleanly and adds no contexts."
-  (let ((rjd-mail-accounts nil)
+  (let ((rjd/mail-accounts nil)
         (mu4e-contexts nil)
         (mu4e-get-mail-command "true")
-        (rjd-mail-mode nil)
-        (rjd-mail--before-mode nil))
-    (rjd-mail-mode 1)
+        (rjd/mail-mode nil)
+        (rjd/mail--before-mode nil))
+    (rjd/mail-mode 1)
     (should (equal mu4e-contexts nil))
     (should (equal (funcall mu4e-get-mail-command) "true"))
-    (rjd-mail-mode -1)))
+    (rjd/mail-mode -1)))
 
 ;;; Where mail cannot run
 
-(defmacro rjd-mail-tests--where-mail-cannot-run (&rest body)
+(defmacro rjd/mail-test-where-mail-cannot-run (&rest body)
   "Run BODY with an account declared on a machine where mail cannot run.
 The machine is leroy, say: no mail container, no prefix, not a
 container -- decided by the machine, not forced."
   (declare (indent 0))
-  `(rjd-mail-tests--on-machine ()
-     (let ((rjd-mail-enabled 'auto)
-           (rjd-mail-command-prefix nil)
-           (rjd-mail-accounts (list rjd-mail-tests--gmail)))
+  `(rjd/mail-test-on-machine ()
+     (let ((rjd/mail-enabled 'auto)
+           (rjd/mail-command-prefix nil)
+           (rjd/mail-accounts (list rjd/mail-test-gmail)))
        ,@body)))
 
-(ert-deftest rjd-mail-mode-where-mail-cannot-run ()
+(ert-deftest rjd/mail-mode-where-mail-cannot-run ()
   "Declared accounts make no contexts and fetch nothing there."
-  (rjd-mail-tests--where-mail-cannot-run
+  (rjd/mail-test-where-mail-cannot-run
     (let ((mu4e-contexts nil)
           (mu4e-get-mail-command "true")
-          (rjd-mail-mode nil)
-          (rjd-mail--before-mode nil))
-      (rjd-mail-mode 1)
+          (rjd/mail-mode nil)
+          (rjd/mail--before-mode nil))
+      (rjd/mail-mode 1)
       (unwind-protect
           (progn
             (should (equal mu4e-contexts nil))
             (should (equal (funcall mu4e-get-mail-command) "true")))
-        (rjd-mail-mode -1)))))
+        (rjd/mail-mode -1)))))
 
-(ert-deftest rjd-mail-without-junk-where-mail-cannot-run ()
-  (rjd-mail-tests--where-mail-cannot-run
-    (should (equal (rjd-mail-without-junk "flag:unread") "flag:unread"))))
+(ert-deftest rjd/mail-without-junk-where-mail-cannot-run ()
+  (rjd/mail-test-where-mail-cannot-run
+    (should (equal (rjd/mail-without-junk "flag:unread") "flag:unread"))))
 
-(ert-deftest rjd-mail-file-flagged-new-where-mail-cannot-run ()
+(ert-deftest rjd/mail-file-flagged-new-where-mail-cannot-run ()
   "No account's maildir is touched."
-  (rjd-mail-tests--where-mail-cannot-run
+  (rjd/mail-test-where-mail-cannot-run
     (let ((root (make-temp-file "rjd-mail-test-" t)))
       (unwind-protect
           (progn
@@ -611,38 +611,38 @@ container -- decided by the machine, not forced."
             (make-directory (format "%s/gmail-test/inbox/cur" root) t)
             (write-region "" nil (format "%s/gmail-test/inbox/new/1.h,U=1:2,F"
                                          root))
-            (rjd-mail-file-flagged-new root)
-            (should (equal (rjd-mail-tests--maildir-files root)
+            (rjd/mail-file-flagged-new root)
+            (should (equal (rjd/mail-test-maildir-files root)
                            '("gmail-test/inbox/new/1.h,U=1:2,F"))))
         (delete-directory root t)))))
 
 
 ;;; Mail written outside mu4e
 
-(defmacro rjd-mail-tests--in-gmail-context (&rest body)
-  "Run BODY with `rjd-mail-mode' on and the Gmail context entered."
+(defmacro rjd/mail-test-in-gmail-context (&rest body)
+  "Run BODY with `rjd/mail-mode' on and the Gmail context entered."
   (declare (indent 0))
-  `(rjd-mail-tests--with-fastmail-defaults
-     (let ((rjd-mail-accounts (list rjd-mail-tests--gmail))
-           (rjd-mail-command-prefix nil)
+  `(rjd/mail-test-with-fastmail-defaults
+     (let ((rjd/mail-accounts (list rjd/mail-test-gmail))
+           (rjd/mail-command-prefix nil)
            (mu4e-contexts nil)
            (mu4e-get-mail-command "true")
-           (rjd-mail-mode nil)
-           (rjd-mail--before-mode nil)
+           (rjd/mail-mode nil)
+           (rjd/mail--before-mode nil)
            (message-mode-hook nil))
-       (rjd-mail-mode 1)
+       (rjd/mail-mode 1)
        (unwind-protect
            (progn
-             (rjd-mail-tests--enter (car mu4e-contexts))
+             (rjd/mail-test-enter (car mu4e-contexts))
              ,@body)
-         (rjd-mail-mode -1)))))
+         (rjd/mail-mode -1)))))
 
-(ert-deftest rjd-mail-message-mode-outside-mu4e-keeps-fastmail ()
+(ert-deftest rjd/mail-message-mode-outside-mu4e-keeps-fastmail ()
   "Plain message-mode sends as the Fastmail default, inside a context too.
 mu4e's context is global and outlives quitting mu4e, so without this
 \\[compose-mail] would send as whichever account mu4e last used."
-  (rjd-mail-tests--needs-mu4e)
-  (rjd-mail-tests--in-gmail-context
+  (rjd/mail-test-needs-mu4e)
+  (rjd/mail-test-in-gmail-context
     (should (equal user-mail-address "someone@example.com"))
     (with-temp-buffer
       (message-mode)
@@ -650,32 +650,32 @@ mu4e's context is global and outlives quitting mu4e, so without this
       (should (equal user-full-name "Me Myself"))
       (should (eq message-send-mail-function 'smtpmail-send-it)))))
 
-(ert-deftest rjd-mail-mu4e-compose-uses-the-context ()
+(ert-deftest rjd/mail-mu4e-compose-uses-the-context ()
   "mu4e's own compose buffers send as the context's account."
-  (rjd-mail-tests--needs-mu4e)
+  (rjd/mail-test-needs-mu4e)
   (require 'mu4e-compose)
-  (rjd-mail-tests--in-gmail-context
+  (rjd/mail-test-in-gmail-context
     (with-temp-buffer
       (mu4e-compose-mode)
       (should (equal user-mail-address "someone@example.com"))
-      (should (eq message-send-mail-function #'rjd-mail-send-it)))))
+      (should (eq message-send-mail-function #'rjd/mail-send-it)))))
 
-(ert-deftest rjd-mail-message-mode-outside-every-context ()
+(ert-deftest rjd/mail-message-mode-outside-every-context ()
   "With no context entered message-mode is left alone."
-  (rjd-mail-tests--needs-mu4e)
-  (rjd-mail-tests--with-fastmail-defaults
-    (let ((rjd-mail-accounts (list rjd-mail-tests--gmail))
+  (rjd/mail-test-needs-mu4e)
+  (rjd/mail-test-with-fastmail-defaults
+    (let ((rjd/mail-accounts (list rjd/mail-test-gmail))
           (mu4e-contexts nil)
-          (rjd-mail-mode nil)
-          (rjd-mail--before-mode nil)
+          (rjd/mail-mode nil)
+          (rjd/mail--before-mode nil)
           (message-mode-hook nil))
-      (rjd-mail-mode 1)
+      (rjd/mail-mode 1)
       (unwind-protect
           (with-temp-buffer
             (message-mode)
             (should-not (local-variable-p 'user-mail-address))
             (should (eq message-send-mail-function 'smtpmail-send-it)))
-        (rjd-mail-mode -1)))))
+        (rjd/mail-mode -1)))))
 
 
 (provide 'rjd-mail-test)

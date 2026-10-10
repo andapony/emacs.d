@@ -32,7 +32,7 @@ whatever reaches it shows as (ORIGINAL USERNAME PROVIDER)."
   `(let ((stub (lambda (username provider)
                  (list 'original username provider)))
          (rjd/gcal-account "someone@example.com")
-         (rjd-mail-command-prefix '("echo")))
+         (rjd/mail-command-prefix '("echo")))
      (advice-add 'oauth2-auto-access-token :override stub '((depth . 100)))
      (unwind-protect
          (progn (rjd/gcal-mode 1) ,@body)
@@ -61,7 +61,7 @@ through the mail command prefix."
   "A failing command gives a promise that signals, not a bogus token.
 org-gcal waits on the promise, so the error reaches its fetch."
   (rjd/gcal-test-with-mode
-    (let* ((rjd-mail-command-prefix '("false"))
+    (let* ((rjd/mail-command-prefix '("false"))
            (promise (oauth2-auto-access-token "calendar-id" 'org-gcal)))
       (should (aio-result promise))
       (should-error (funcall (aio-result promise))))))
@@ -81,10 +81,10 @@ temporary one.  `rjd/gcal-mode' is on for BODY."
           (rjd/gcal-file (file-name-concat dir "gcal.org"))
           (rjd/gcal-account "someone@example.com")
           (rjd/gcal-fetch-interval 900)
-          (rjd-mail-enabled 'auto)
-          (rjd-mail-container-marker-files
+          (rjd/mail-enabled 'auto)
+          (rjd/mail-container-marker-files
            (list (file-name-concat dir "no-such-marker")))
-          (rjd-mail-command-prefix
+          (rjd/mail-command-prefix
            (and ,mail-can-run '("docker" "exec" "-i" "mail")))
           (org-agenda-mode-hook nil)
           (fetches nil))

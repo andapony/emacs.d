@@ -1348,17 +1348,17 @@ the abbrevs in the major mode's abbrev table rather than the global one."
 
 ;;; Mail
 
-;; Mail accounts are declared in private.el as `rjd-mail-accounts', and
-;; `rjd-mail-mode' (user-lisp/rjd-mail.el) makes each one a mu4e context.
+;; Mail accounts are declared in private.el as `rjd/mail-accounts', and
+;; `rjd/mail-mode' (user-lisp/rjd-mail.el) makes each one a mu4e context.
 ;; Outside every context the settings below, and private.el's identity
 ;; and smtpmail, are the Fastmail default; entering a context replaces
 ;; them with the account's, and leaving puts them back.  With no account
 ;; declared there are no contexts and an update only indexes.  If an
-;; upgrade breaks the contexts, turn `rjd-mail-mode' off.
+;; upgrade breaks the contexts, turn `rjd/mail-mode' off.
 ;;
 ;; mu4e fetches mail itself, every `mu4e-update-interval' seconds while
-;; it runs, through `rjd-mail-get-mail-command': mbsync, behind
-;; `rjd-mail-command-prefix'.  There is no separate timer to overlap it.
+;; it runs, through `rjd/mail-get-mail-command': mbsync, behind
+;; `rjd/mail-command-prefix'.  There is no separate timer to overlap it.
 ;; mu finds the maildir itself -- the root given to `mu init' -- so
 ;; there is no maildir setting here.
 (use-package mu4e
@@ -1398,7 +1398,7 @@ the abbrevs in the major mode's abbrev table rather than the global one."
   ;; stream type and the identity to send as are all set in private.el.
   ;; Without that file mu4e still reads mail, and sending is simply
   ;; unconfigured.  A context sends through msmtp instead, with
-  ;; `rjd-mail-send-it', and leaving it puts this back.
+  ;; `rjd/mail-send-it', and leaving it puts this back.
   (message-send-mail-function   'smtpmail-send-it)
 
   ;; Gmail keeps one message under many labels, and every synced folder
@@ -1435,18 +1435,18 @@ the abbrevs in the major mode's abbrev table rather than the global one."
   (message-kill-buffer-on-exit t)
 
   ;; Each account's Spam and Trash folders are left out by
-  ;; `rjd-mail-without-junk', which reads the declared accounts each time
+  ;; `rjd/mail-without-junk', which reads the declared accounts each time
   ;; a query runs, so these are functions rather than strings.
   (mu4e-bookmarks
    `((:name "Unread" :key ?u
-      :query ,(lambda () (rjd-mail-without-junk "flag:unread AND NOT flag:trashed AND NOT maildir:/Spam")))
+      :query ,(lambda () (rjd/mail-without-junk "flag:unread AND NOT flag:trashed AND NOT maildir:/Spam")))
      (:name "Today" :key ?t
-      :query ,(lambda () (rjd-mail-without-junk "date:today..now AND NOT flag:trashed AND NOT maildir:/Spam")))
+      :query ,(lambda () (rjd/mail-without-junk "date:today..now AND NOT flag:trashed AND NOT maildir:/Spam")))
      (:name "Last 7 days" :key ?w
-      :query ,(lambda () (rjd-mail-without-junk "date:7d..now AND NOT flag:trashed AND NOT maildir:/Spam")))
+      :query ,(lambda () (rjd/mail-without-junk "date:7d..now AND NOT flag:trashed AND NOT maildir:/Spam")))
      (:name "Flagged" :key ?f :query "flag:flagged")))
   :config
-  (rjd-mail-mode 1)
+  (rjd/mail-mode 1)
   ;; Meeting invitations: a message's text/calendar part is shown with
   ;; Accept, Tentative and Decline buttons.  The buttons are Gnus's;
   ;; mu4e-icalendar takes over their reply in a mu4e view, composing it

@@ -198,13 +198,13 @@ lets timers run, as returning to the command loop would; see
 ;;; Mail
 
 (ert-deftest rjd/smoke-mu4e-goes-through-rjd-mail ()
-  "Loading mu4e turns on `rjd-mail-mode', and mail is fetched through it.
+  "Loading mu4e turns on `rjd/mail-mode', and mail is fetched through it.
 Skipped where mu4e is not installed.  Whether accounts are declared
 depends on the private.el in use, so the contexts are not checked."
   (skip-unless (locate-library "mu4e"))
   (require 'mu4e)
-  (should rjd-mail-mode)
-  (should (eq mu4e-get-mail-command #'rjd-mail-get-mail-command))
+  (should rjd/mail-mode)
+  (should (eq mu4e-get-mail-command #'rjd/mail-get-mail-command))
   (should (eq mu4e-search-skip-duplicates t))
   (should (eq mu4e-search-include-related nil))
   (should (eq mu4e-context-policy 'pick-first))

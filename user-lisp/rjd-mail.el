@@ -1,9 +1,9 @@
 ;;; rjd-mail.el --- Mail accounts as mu4e contexts  -*- lexical-binding: t -*-
 
 ;;; Commentary:
-;; Turns the mail accounts declared in `rjd-mail-accounts' into mu4e
+;; Turns the mail accounts declared in `rjd/mail-accounts' into mu4e
 ;; contexts, and owns the one place mail commands are built:
-;; `rjd-mail-command', which puts `rjd-mail-command-prefix' in front.
+;; `rjd/mail-command', which puts `rjd/mail-command-prefix' in front.
 ;;
 ;; The accounts are data, one plist each, set in private.el -- the
 ;; addresses have no place in this public repository.  With none
@@ -11,12 +11,12 @@
 ;; indexes.  So a machine without private.el starts cleanly.
 ;;
 ;; Declared accounts count only where mail can run, which
-;; `rjd-mail-available-p' decides, for the calendar in rjd-gcal.el
+;; `rjd/mail-available-p' decides, for the calendar in rjd-gcal.el
 ;; too: the host with the mail container, and claude-dev with the
 ;; development toolchain.  Elsewhere -- leroy, bulldog -- private.el
-;; still declares them, but `rjd-mail-active-accounts' is nil, and
+;; still declares them, but `rjd/mail-active-accounts' is nil, and
 ;; Emacs starts as it does with none declared rather than running an
-;; mbsync that is not set up for them.  `rjd-mail-enabled' overrides
+;; mbsync that is not set up for them.  `rjd/mail-enabled' overrides
 ;; the decision.
 ;;
 ;; The global settings -- `user-mail-address', smtpmail and the rest --
@@ -41,11 +41,11 @@
 ;; host where the setup playbook has written the mail container's
 ;; configuration directory, nil inside a container (claude-dev) and on
 ;; a machine without the mail container.  If the choice is wrong, set
-;; `rjd-mail-command-prefix' in private.el.
+;; `rjd/mail-command-prefix' in private.el.
 ;;
-;; A context sends through msmtp, with `rjd-mail-send-it' as
+;; A context sends through msmtp, with `rjd/mail-send-it' as
 ;; `message-send-mail-function' and the msmtp command, prefix and all,
-;; in `rjd-mail-sendmail-command'.  It is its own function rather than
+;; in `rjd/mail-sendmail-command'.  It is its own function rather than
 ;; message's sendmail one, which puts "-oi" straight after the program
 ;; and so would run "docker -oi exec ...".  The command is built on
 ;; entering the context, so it uses the prefix in force then.
@@ -54,9 +54,9 @@
 ;; init.el: duplicates hidden, because a message in the Inbox is also in
 ;; All Mail; related messages left out of searches, or a thread's spam
 ;; and trash come with it; and bookmarks that leave Spam and Trash out,
-;; for which `rjd-mail-without-junk' builds the query.
+;; for which `rjd/mail-without-junk' builds the query.
 ;;
-;; Enable with `rjd-mail-mode', once mu4e has loaded.
+;; Enable with `rjd/mail-mode', once mu4e has loaded.
 
 ;;; Code:
 
@@ -75,81 +75,81 @@
 
 ;;; Customization
 
-(defgroup rjd-mail nil
+(defgroup rjd/mail nil
   "Mail accounts as mu4e contexts."
   :group 'mail)
 
-(defcustom rjd-mail-container-name "mail"
+(defcustom rjd/mail-container-name "mail"
   "The name of the mail container, as `docker exec' takes it.
 The setup playbook's `mail_container_name'."
   :type 'string
-  :group 'rjd-mail)
+  :group 'rjd/mail)
 
-(defvar rjd-mail-container-directory "~/.config/mail-container"
+(defvar rjd/mail-container-directory "~/.config/mail-container"
   "The host directory that holds the mail container's configuration.
 The setup playbook writes it, and mounts it into the container, so its
 presence is what says this machine has the container.")
 
-(defvar rjd-mail-container-marker-files '("/.dockerenv" "/run/.containerenv")
+(defvar rjd/mail-container-marker-files '("/.dockerenv" "/run/.containerenv")
   "Files whose presence says Emacs itself runs in a container.
 Docker's and podman's, as `rjd/container-git' in init.el checks.")
 
-(defun rjd-mail-default-command-prefix ()
+(defun rjd/mail-default-command-prefix ()
   "Return the mail command prefix this machine needs.
 On a host with the mail container, the `docker exec -i' that reaches
 it -- `-i', because msmtp reads the message on its standard input.
 nil inside a container, which is claude-dev in development, where the
 tools run directly; and nil on a machine without the mail container,
 where there is nothing to reach."
-  (and (not (seq-some #'file-exists-p rjd-mail-container-marker-files))
-       (file-directory-p rjd-mail-container-directory)
-       (list "docker" "exec" "-i" rjd-mail-container-name)))
+  (and (not (seq-some #'file-exists-p rjd/mail-container-marker-files))
+       (file-directory-p rjd/mail-container-directory)
+       (list "docker" "exec" "-i" rjd/mail-container-name)))
 
-(defcustom rjd-mail-command-prefix (rjd-mail-default-command-prefix)
+(defcustom rjd/mail-command-prefix (rjd/mail-default-command-prefix)
   "Command words put in front of every mail command, or nil.
 nil runs mbsync, msmtp and oama directly, as in development.  On a
 host where they live in a container, the invocation that reaches it,
 such as (\"docker\" \"exec\" \"-i\" \"mail\").  The default is chosen
 for this machine when the package loads, by
-`rjd-mail-default-command-prefix'."
+`rjd/mail-default-command-prefix'."
   :type '(choice (const :tag "Run directly" nil)
                  (repeat string))
-  :group 'rjd-mail)
+  :group 'rjd/mail)
 
-(defvar rjd-mail-toolchain-program "mbsync"
+(defvar rjd/mail-toolchain-program "mbsync"
   "The program whose presence says the mail tools are installed here.
 Inside a container that is claude-dev with the development toolchain;
-see `rjd-mail-available-p'.")
+see `rjd/mail-available-p'.")
 
-(defcustom rjd-mail-enabled 'auto
+(defcustom rjd/mail-enabled 'auto
   "Whether the declared accounts and calendar take effect on this machine.
-`auto' asks `rjd-mail-available-p' to decide from the machine; t and
+`auto' asks `rjd/mail-available-p' to decide from the machine; t and
 nil force them on or off, from private.el."
   :type '(choice (const :tag "Where mail can run" auto)
                  (const :tag "Always" t)
                  (const :tag "Never" nil))
-  :group 'rjd-mail)
+  :group 'rjd/mail)
 
-(defun rjd-mail-available-p ()
+(defun rjd/mail-available-p ()
   "Non-nil if mail can run on this machine, so accounts should count.
 The one place that decides, for mail and calendar alike.  Unless
-`rjd-mail-enabled' forces the answer, mail can run where
-`rjd-mail-command-prefix' reaches the tools -- the host with the mail
+`rjd/mail-enabled' forces the answer, mail can run where
+`rjd/mail-command-prefix' reaches the tools -- the host with the mail
 container, or wherever private.el points it -- and inside a container
-with `rjd-mail-toolchain-program' on `exec-path', which is claude-dev
+with `rjd/mail-toolchain-program' on `exec-path', which is claude-dev
 during development.  Not on a host without the mail container, such
 as leroy or bulldog: any mbsync there is not set up for these accounts.
 
-Elsewhere `rjd-mail-accounts' and `rjd/gcal-account' are ignored, so
+Elsewhere `rjd/mail-accounts' and `rjd/gcal-account' are ignored, so
 Emacs starts as it would with none declared."
-  (if (eq rjd-mail-enabled 'auto)
-      (and (or rjd-mail-command-prefix
-               (and (seq-some #'file-exists-p rjd-mail-container-marker-files)
-                    (executable-find rjd-mail-toolchain-program)))
+  (if (eq rjd/mail-enabled 'auto)
+      (and (or rjd/mail-command-prefix
+               (and (seq-some #'file-exists-p rjd/mail-container-marker-files)
+                    (executable-find rjd/mail-toolchain-program)))
            t)
-    rjd-mail-enabled))
+    rjd/mail-enabled))
 
-(defconst rjd-mail-gmail-folders
+(defconst rjd/mail-gmail-folders
   '(:inbox "/inbox" :sent "/sent" :drafts "/drafts"
     :trash "/trash" :refile "/all" :spam "/spam")
   "Folders of a Gmail account, relative to its maildir.
@@ -157,7 +157,7 @@ The local names the mbsync configuration gives Gmail's INBOX, Sent
 Mail, Drafts, Trash, All Mail and Spam.  Refiling -- archiving -- goes
 to All Mail, so the message leaves the Inbox as it does on the web.")
 
-(defcustom rjd-mail-accounts nil
+(defcustom rjd/mail-accounts nil
   "Mail accounts, one plist each, which become mu4e contexts.
 Set in private.el.  Each plist has:
 
@@ -170,7 +170,7 @@ and optionally:
 
   :folders    a plist of :inbox :sent :drafts :trash :refile :spam,
               each relative to :maildir; default
-              `rjd-mail-gmail-folders'
+              `rjd/mail-gmail-folders'
   :sent-messages-behavior
               `mu4e-sent-messages-behavior' in this context; default
               `delete', since Gmail files sent mail itself
@@ -185,45 +185,45 @@ and optionally:
   :msmtp-account
               the msmtp account that sends as it; default :name"
   :type '(repeat plist)
-  :group 'rjd-mail)
+  :group 'rjd/mail)
 
 
 ;;; Commands
 
-(defun rjd-mail-active-accounts ()
-  "The accounts that take effect here: `rjd-mail-accounts', or nil.
-Nil where `rjd-mail-available-p' says mail cannot run, so that a
+(defun rjd/mail-active-accounts ()
+  "The accounts that take effect here: `rjd/mail-accounts', or nil.
+Nil where `rjd/mail-available-p' says mail cannot run, so that a
 machine without the tools behaves as if none were declared."
-  (and (rjd-mail-available-p) rjd-mail-accounts))
+  (and (rjd/mail-available-p) rjd/mail-accounts))
 
-(defun rjd-mail-command (&rest argv)
-  "Return ARGV with `rjd-mail-command-prefix' in front.
+(defun rjd/mail-command (&rest argv)
+  "Return ARGV with `rjd/mail-command-prefix' in front.
 ARGV is a command and its arguments, as strings; so is the result."
-  (append rjd-mail-command-prefix argv))
+  (append rjd/mail-command-prefix argv))
 
 ;;;###autoload
-(defun rjd-mail-get-mail-command ()
+(defun rjd/mail-get-mail-command ()
   "Return the shell command that fetches mail for every active account.
 For `mu4e-get-mail-command', which runs it through a shell.  With no
-active accounts -- see `rjd-mail-active-accounts' -- it is \"true\",
+active accounts -- see `rjd/mail-active-accounts' -- it is \"true\",
 mu4e's own default, so an update only indexes."
-  (if-let* ((accounts (rjd-mail-active-accounts)))
+  (if-let* ((accounts (rjd/mail-active-accounts)))
       (mapconcat #'shell-quote-argument
-                 (apply #'rjd-mail-command "mbsync"
-                        (mapcar #'rjd-mail--mbsync-group accounts))
+                 (apply #'rjd/mail-command "mbsync"
+                        (mapcar #'rjd/mail--mbsync-group accounts))
                  " ")
     "true"))
 
 
 ;;; Sending
 
-(defvar rjd-mail-sendmail-command nil
+(defvar rjd/mail-sendmail-command nil
   "The command that sends a message as the current context's account.
-A list of strings, built through `rjd-mail-command'; nil outside every
-context.  `rjd-mail-send-it' adds the recipients.")
+A list of strings, built through `rjd/mail-command'; nil outside every
+context.  `rjd/mail-send-it' adds the recipients.")
 
-(defun rjd-mail-send-it ()
-  "Send the prepared message buffer with `rjd-mail-sendmail-command'.
+(defun rjd/mail-send-it ()
+  "Send the prepared message buffer with `rjd/mail-sendmail-command'.
 A `message-send-mail-function', for the contexts.  The command reads
 the recipients from the message (msmtp's -t), or for a resend is given
 those of its Resent-To.
@@ -233,7 +233,7 @@ after `sendmail-program': with the program \"docker\" and the rest of
 the prefixed command in `message-sendmail-extra-arguments', that makes
 \"docker -oi exec ...\"."
   (require 'message)
-  (unless rjd-mail-sendmail-command
+  (unless rjd/mail-sendmail-command
     (error "No account to send from: enter a mu4e context first"))
   (let ((resent-to (save-restriction
                      (message-narrow-to-headers)
@@ -244,7 +244,7 @@ the prefixed command in `message-sendmail-extra-arguments', that makes
     (replace-match "\n")
     (run-hooks 'message-send-mail-hook)
     (let* ((output (generate-new-buffer " *rjd-mail send*"))
-           (command (append rjd-mail-sendmail-command
+           (command (append rjd/mail-sendmail-command
                             (if resent-to
                                 (split-string
                                  (mail-strip-quoted-names resent-to)
@@ -265,32 +265,32 @@ the prefixed command in `message-sendmail-extra-arguments', that makes
 
 ;;; Accounts
 
-(defun rjd-mail--mbsync-group (account)
+(defun rjd/mail--mbsync-group (account)
   "The mbsync channel or group that syncs ACCOUNT."
   (or (plist-get account :mbsync-group) (plist-get account :name)))
 
-(defun rjd-mail--folder (account folder)
-  "The maildir of ACCOUNT's FOLDER, a key of `rjd-mail-gmail-folders'."
+(defun rjd/mail--folder (account folder)
+  "The maildir of ACCOUNT's FOLDER, a key of `rjd/mail-gmail-folders'."
   (concat (plist-get account :maildir)
-          (plist-get (or (plist-get account :folders) rjd-mail-gmail-folders)
+          (plist-get (or (plist-get account :folders) rjd/mail-gmail-folders)
                      folder)))
 
-(defun rjd-mail--msmtp-account (account)
+(defun rjd/mail--msmtp-account (account)
   "The msmtp account that sends ACCOUNT's mail."
   (or (plist-get account :msmtp-account) (plist-get account :name)))
 
-(defun rjd-mail--settings (account)
+(defun rjd/mail--settings (account)
   "The variables a context for ACCOUNT sets, as an alist."
   `((user-mail-address . ,(plist-get account :address))
     (user-full-name . ,(plist-get account :full-name))
-    (message-send-mail-function . rjd-mail-send-it)
-    (rjd-mail-sendmail-command
-     . ,(rjd-mail-command "msmtp" "-a" (rjd-mail--msmtp-account account)
+    (message-send-mail-function . rjd/mail-send-it)
+    (rjd/mail-sendmail-command
+     . ,(rjd/mail-command "msmtp" "-a" (rjd/mail--msmtp-account account)
                           "--read-envelope-from"))
-    (mu4e-sent-folder . ,(rjd-mail--folder account :sent))
-    (mu4e-drafts-folder . ,(rjd-mail--folder account :drafts))
-    (mu4e-trash-folder . ,(rjd-mail--folder account :trash))
-    (mu4e-refile-folder . ,(rjd-mail--folder account :refile))
+    (mu4e-sent-folder . ,(rjd/mail--folder account :sent))
+    (mu4e-drafts-folder . ,(rjd/mail--folder account :drafts))
+    (mu4e-trash-folder . ,(rjd/mail--folder account :trash))
+    (mu4e-refile-folder . ,(rjd/mail--folder account :refile))
     (mu4e-sent-messages-behavior
      . ,(or (plist-get account :sent-messages-behavior) 'delete))
     (mu4e-trash-without-flag
@@ -298,45 +298,45 @@ the prefixed command in `message-sendmail-extra-arguments', that makes
             (plist-get account :trash-without-flag)
           t))))
 
-(defvar rjd-mail--saved nil
+(defvar rjd/mail--saved nil
   "The global values a context replaced, to restore on leaving it.
 An alist of (VARIABLE . VALUE), or nil outside every context.")
 
-(defun rjd-mail--enter (settings)
+(defun rjd/mail--enter (settings)
   "Save the variables SETTINGS names, then set them."
   ;; Save only on the way in from outside every context, so that what
   ;; is restored is always the global default, not another account.
-  (unless rjd-mail--saved
-    (setq rjd-mail--saved
+  (unless rjd/mail--saved
+    (setq rjd/mail--saved
           (mapcar (lambda (cell)
                     (cons (car cell) (symbol-value (car cell))))
                   settings)))
   (dolist (cell settings)
     (set (car cell) (cdr cell))))
 
-(defun rjd-mail--leave ()
+(defun rjd/mail--leave ()
   "Restore the values the current context replaced."
-  (dolist (cell rjd-mail--saved)
+  (dolist (cell rjd/mail--saved)
     (set (car cell) (cdr cell)))
-  (setq rjd-mail--saved nil))
+  (setq rjd/mail--saved nil))
 
-(defconst rjd-mail--message-variables
+(defconst rjd/mail--message-variables
   '(user-mail-address user-full-name message-send-mail-function)
   "The variables a context sets that decide who a message is from.")
 
-(defun rjd-mail--outside-mu4e ()
+(defun rjd/mail--outside-mu4e ()
   "Make a message buffer outside mu4e send as the global default.
 For `message-mode-hook'.  A mu4e context sets the identity and sending
 function globally, and keeps them after mu4e quits, so a plain
 \\[compose-mail] would otherwise go out as the last account mu4e used.
 Here they are put back, buffer-locally, to what the context replaced.
 message copies these locals into the buffer it sends from."
-  (when (and rjd-mail--saved (not (derived-mode-p 'mu4e-compose-mode)))
-    (dolist (var rjd-mail--message-variables)
-      (when-let* ((cell (assq var rjd-mail--saved)))
+  (when (and rjd/mail--saved (not (derived-mode-p 'mu4e-compose-mode)))
+    (dolist (var rjd/mail--message-variables)
+      (when-let* ((cell (assq var rjd/mail--saved)))
         (set (make-local-variable var) (cdr cell))))))
 
-(defun rjd-mail--matcher (account)
+(defun rjd/mail--matcher (account)
   "A mu4e match function for ACCOUNT.
 A message matches when it is in the account's maildir, or addressed to
 the account in To or Cc."
@@ -350,10 +350,10 @@ the account in To or Cc."
                                address))
                       (append (plist-get msg :to) (plist-get msg :cc))))))))
 
-(defun rjd-mail-contexts (&optional accounts)
+(defun rjd/mail-contexts (&optional accounts)
   "Return a mu4e context for each of ACCOUNTS.
-ACCOUNTS defaults to `rjd-mail-active-accounts'.  With none, nil."
-  (let ((accounts (or accounts (rjd-mail-active-accounts))))
+ACCOUNTS defaults to `rjd/mail-active-accounts'.  With none, nil."
+  (let ((accounts (or accounts (rjd/mail-active-accounts))))
     (when accounts
       (require 'mu4e-context)
       (mapcar (lambda (account)
@@ -362,25 +362,25 @@ ACCOUNTS defaults to `rjd-mail-active-accounts'.  With none, nil."
                  ;; Worked out on entering, so that the sending command
                  ;; is built behind the prefix in force then.
                  :enter-func (lambda ()
-                               (rjd-mail--enter (rjd-mail--settings account)))
-                 :leave-func #'rjd-mail--leave
-                 :match-func (rjd-mail--matcher account)))
+                               (rjd/mail--enter (rjd/mail--settings account)))
+                 :leave-func #'rjd/mail--leave
+                 :match-func (rjd/mail--matcher account)))
               accounts))))
 
 
 ;;; Queries
 
 ;;;###autoload
-(defun rjd-mail-without-junk (query)
+(defun rjd/mail-without-junk (query)
   "Return mu QUERY with every declared account's Spam and Trash left out.
-QUERY itself when no account is active; see `rjd-mail-active-accounts'."
-  (if-let* ((accounts (rjd-mail-active-accounts)))
+QUERY itself when no account is active; see `rjd/mail-active-accounts'."
+  (if-let* ((accounts (rjd/mail-active-accounts)))
       (format "(%s) AND NOT (%s)"
               query
               (mapconcat (lambda (maildir) (concat "maildir:" maildir))
                          (mapcan (lambda (account)
-                                   (list (rjd-mail--folder account :spam)
-                                         (rjd-mail--folder account :trash)))
+                                   (list (rjd/mail--folder account :spam)
+                                         (rjd/mail--folder account :trash)))
                                  accounts)
                          " OR "))
     query))
@@ -388,7 +388,7 @@ QUERY itself when no account is active; see `rjd-mail-active-accounts'."
 
 ;;; Flags on unread mail
 
-(defun rjd-mail-file-flagged-new (root)
+(defun rjd/mail-file-flagged-new (root)
   "Move the accounts' unread messages that carry flags from new/ to cur/.
 ROOT is mu's root maildir.  mbsync files a message it has not seen
 read in new/, with the rest of its flags still in the name: a starred
@@ -400,8 +400,8 @@ is still unread, since it has no S.  mbsync finds a message by the UID
 in its name, in new/ or cur/, so the move changes nothing on the server.
 
 Only messages with flags move, so the rest stay New.  Only the maildirs
-of `rjd-mail-active-accounts' are searched."
-  (dolist (account (rjd-mail-active-accounts))
+of `rjd/mail-active-accounts' are searched."
+  (dolist (account (rjd/mail-active-accounts))
     (let ((maildir (concat (directory-file-name root)
                            (plist-get account :maildir))))
       (when (file-directory-p maildir)
@@ -417,51 +417,51 @@ of `rjd-mail-active-accounts' are searched."
                   (rename-file file (file-name-concat
                                      cur (file-name-nondirectory file))))))))))))
 
-(defun rjd-mail--file-flagged-new-before-index (&rest _)
-  "Run `rjd-mail-file-flagged-new' on mu's root, as mu4e indexes.
+(defun rjd/mail--file-flagged-new-before-index (&rest _)
+  "Run `rjd/mail-file-flagged-new' on mu's root, as mu4e indexes.
 Advice on `mu4e-update-index', which mu4e calls once the fetch is done,
 so every index sees the flags of mail mbsync has just put in new/.
 Does nothing before mu4e has started and knows the root."
   (when-let* ((root (ignore-errors (mu4e-root-maildir))))
-    (rjd-mail-file-flagged-new root)))
+    (rjd/mail-file-flagged-new root)))
 
 
 ;;; Mode
 
-(defvar rjd-mail--before-mode nil
+(defvar rjd/mail--before-mode nil
   "`mu4e-contexts' and `mu4e-get-mail-command' before the mode was on.")
 
 ;;;###autoload
-(define-minor-mode rjd-mail-mode
-  "Make each account in `rjd-mail-active-accounts' a mu4e context.
-Also fetch mail for them through `rjd-mail-get-mail-command', and keep
+(define-minor-mode rjd/mail-mode
+  "Make each account in `rjd/mail-active-accounts' a mu4e context.
+Also fetch mail for them through `rjd/mail-get-mail-command', and keep
 message buffers outside mu4e on the global default identity.  Turning
 the mode off puts back the contexts and fetch command it replaced, and
 the global defaults if a context was entered.
 
 While on, each mu4e index first moves the accounts' unread mail that
-carries flags out of new/; see `rjd-mail-file-flagged-new'."
+carries flags out of new/; see `rjd/mail-file-flagged-new'."
   :global t
-  :group 'rjd-mail
-  (if rjd-mail-mode
+  :group 'rjd/mail
+  (if rjd/mail-mode
       (progn
-        (unless rjd-mail--before-mode
-          (setq rjd-mail--before-mode
+        (unless rjd/mail--before-mode
+          (setq rjd/mail--before-mode
                 (list (bound-and-true-p mu4e-contexts)
                       (bound-and-true-p mu4e-get-mail-command))))
-        (setq mu4e-contexts (rjd-mail-contexts)
-              mu4e-get-mail-command #'rjd-mail-get-mail-command)
-        (add-hook 'message-mode-hook #'rjd-mail--outside-mu4e)
+        (setq mu4e-contexts (rjd/mail-contexts)
+              mu4e-get-mail-command #'rjd/mail-get-mail-command)
+        (add-hook 'message-mode-hook #'rjd/mail--outside-mu4e)
         (advice-add 'mu4e-update-index :before
-                    #'rjd-mail--file-flagged-new-before-index))
-    (remove-hook 'message-mode-hook #'rjd-mail--outside-mu4e)
+                    #'rjd/mail--file-flagged-new-before-index))
+    (remove-hook 'message-mode-hook #'rjd/mail--outside-mu4e)
     (advice-remove 'mu4e-update-index
-                   #'rjd-mail--file-flagged-new-before-index)
-    (when rjd-mail--before-mode
-      (rjd-mail--leave)
-      (setq mu4e-contexts (nth 0 rjd-mail--before-mode)
-            mu4e-get-mail-command (nth 1 rjd-mail--before-mode)
-            rjd-mail--before-mode nil))))
+                   #'rjd/mail--file-flagged-new-before-index)
+    (when rjd/mail--before-mode
+      (rjd/mail--leave)
+      (setq mu4e-contexts (nth 0 rjd/mail--before-mode)
+            mu4e-get-mail-command (nth 1 rjd/mail--before-mode)
+            rjd/mail--before-mode nil))))
 
 (provide 'rjd-mail)
 ;;; rjd-mail.el ends here

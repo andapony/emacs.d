@@ -12,7 +12,7 @@
 ;; `org-gcal', and waits on the aio promise it returns.  The mode puts
 ;; `:around' advice on that function which answers for the `org-gcal'
 ;; provider itself -- running oama's access command through
-;; `rjd-mail-command', and returning the output as an already resolved
+;; `rjd/mail-command', and returning the output as an already resolved
 ;; promise -- and lets every other provider through.  If the calendar
 ;; disappears from the agenda after an org-gcal or oauth2-auto
 ;; upgrade, that advice is the first place to look: the function may
@@ -31,7 +31,7 @@
 ;; .org-generic-id-locations -- none of it an OAuth token.
 ;;
 ;; The calendar is fetched only where mail can run, as
-;; `rjd-mail-available-p' decides: the token comes from the same tools.
+;; `rjd/mail-available-p' decides: the token comes from the same tools.
 ;; Elsewhere `rjd/gcal-active-account' is nil, so there is no timer and
 ;; no fetch, though the calendar file is still made, empty.
 ;;
@@ -62,9 +62,9 @@ and so does a machine where mail cannot run: see
 
 (defun rjd/gcal-active-account ()
   "The account whose calendar is fetched here: `rjd/gcal-account', or nil.
-Nil where `rjd-mail-available-p' says mail cannot run, since the token
+Nil where `rjd/mail-available-p' says mail cannot run, since the token
 comes from the same tools, so such a machine fetches nothing."
-  (and (rjd-mail-available-p) rjd/gcal-account))
+  (and (rjd/mail-available-p) rjd/gcal-account))
 
 (defcustom rjd/gcal-calendar-id nil
   "ID of the calendar to fetch, or nil for the account's primary calendar.
@@ -89,7 +89,7 @@ next turned on."
 (defcustom rjd/gcal-token-command '("oama" "access")
   "Command printing an access token for an account, without the account.
 The account is appended, and the whole is run through
-`rjd-mail-command', so that it lands where the token store is."
+`rjd/mail-command', so that it lands where the token store is."
   :type '(repeat string)
   :group 'rjd/gcal)
 
@@ -99,7 +99,7 @@ The account is appended, and the whole is run through
 (defun rjd/gcal--token ()
   "Return a fresh access token for `rjd/gcal-account'.
 Signal an error, with the command's own message, if it fails."
-  (let ((argv (apply #'rjd-mail-command
+  (let ((argv (apply #'rjd/mail-command
                      (append rjd/gcal-token-command (list rjd/gcal-account))))
         (stderr (make-temp-file "rjd-gcal-stderr")))
     (unwind-protect
