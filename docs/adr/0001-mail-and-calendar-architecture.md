@@ -80,12 +80,14 @@ Getting the token takes a one-time login in a browser, after which no
 password is typed.  oama's redirect listener binds only loopback inside
 its container, and Google accepts only loopback redirect URIs for a
 desktop client, so the browser on the Mac cannot deliver the redirect
-itself.  The login is done by hand: the consent URL is fetched from
+itself.  A published port would not reach the listener on its own, so
+the mail container runs a relay from the published port to loopback,
+and the port is published on the Mac's loopback only (#12): the login
+is then an ordinary browser round trip.  In `claude-dev`, which
+publishes no port, it is done by hand: the consent URL is fetched from
 oama inside the container and opened in the Mac browser, and the
 redirect URL the browser then fails to load is copied back and
-delivered to oama from inside the container (#5 has the procedure).  A
-published port would not reach the listener on its own; it would need
-a relay inside the container from the published port to loopback.
+delivered to oama from inside the container (#5 has the procedure).
 
 **Calendar: org-gcal, fetch only.**  org-gcal fetches events into a
 dedicated per-account org file under the agenda directory, on agenda

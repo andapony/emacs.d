@@ -27,7 +27,12 @@
 ;; The prefix exists because the tools that authenticate -- mbsync,
 ;; msmtp and oama -- run in a mail container on the host, reached
 ;; through `docker exec'; in development they run directly and the
-;; prefix is nil.  ADR 0001 has the reasons.
+;; prefix is nil.  ADR 0001 has the reasons.  The default is chosen per
+;; machine when this file loads: the container's `docker exec -i' on a
+;; host where the setup playbook has written the mail container's
+;; configuration directory, nil inside a container (claude-dev) and on
+;; a machine without the mail container.  If the choice is wrong, set
+;; `rjd-mail-command-prefix' in private.el.
 ;;
 ;; A context sends through msmtp, with `rjd-mail-send-it' as
 ;; `message-send-mail-function' and the msmtp command, prefix and all,
@@ -65,11 +70,39 @@
   "Mail accounts as mu4e contexts."
   :group 'mail)
 
-(defcustom rjd-mail-command-prefix nil
+(defcustom rjd-mail-container-name "mail"
+  "The name of the mail container, as `docker exec' takes it.
+The setup playbook's `mail_container_name'."
+  :type 'string
+  :group 'rjd-mail)
+
+(defvar rjd-mail-container-directory "~/.config/mail-container"
+  "The host directory that holds the mail container's configuration.
+The setup playbook writes it, and mounts it into the container, so its
+presence is what says this machine has the container.")
+
+(defvar rjd-mail-container-marker-files '("/.dockerenv" "/run/.containerenv")
+  "Files whose presence says Emacs itself runs in a container.
+Docker's and podman's, as `rjd/container-git' in init.el checks.")
+
+(defun rjd-mail-default-command-prefix ()
+  "Return the mail command prefix this machine needs.
+On a host with the mail container, the `docker exec -i' that reaches
+it -- `-i', because msmtp reads the message on its standard input.
+nil inside a container, which is claude-dev in development, where the
+tools run directly; and nil on a machine without the mail container,
+where there is nothing to reach."
+  (and (not (seq-some #'file-exists-p rjd-mail-container-marker-files))
+       (file-directory-p rjd-mail-container-directory)
+       (list "docker" "exec" "-i" rjd-mail-container-name)))
+
+(defcustom rjd-mail-command-prefix (rjd-mail-default-command-prefix)
   "Command words put in front of every mail command, or nil.
 nil runs mbsync, msmtp and oama directly, as in development.  On a
 host where they live in a container, the invocation that reaches it,
-such as (\"docker\" \"exec\" \"-i\" \"mail\")."
+such as (\"docker\" \"exec\" \"-i\" \"mail\").  The default is chosen
+for this machine when the package loads, by
+`rjd-mail-default-command-prefix'."
   :type '(choice (const :tag "Run directly" nil)
                  (repeat string))
   :group 'rjd-mail)

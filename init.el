@@ -1363,10 +1363,16 @@ the abbrevs in the major mode's abbrev table rather than the global one."
 ;; there is no maildir setting here.
 (use-package mu4e
   :defer t
-  ;; claude-dev builds mu, and with it mu4e, under ~/.local/mu; a host
-  ;; gets mu4e from its package manager.  A missing directory on
-  ;; `load-path' is harmless.
-  :load-path "~/.local/mu/share/emacs/site-lisp/mu4e"
+  ;; claude-dev builds mu, and with it mu4e, under ~/.local/mu.  The Mac
+  ;; gets both from Homebrew (the setup playbook installs `mu'), whose
+  ;; site-lisp /Applications/Emacs.app does not search; the mu4e elisp
+  ;; must be the one Homebrew shipped with that `mu', so it is named
+  ;; here, Apple silicon's prefix first.  Mint's apt package puts mu4e
+  ;; where Emacs finds it already.  A missing directory on `load-path'
+  ;; is harmless.
+  :load-path ("~/.local/mu/share/emacs/site-lisp/mu4e"
+              "/opt/homebrew/share/emacs/site-lisp/mu/mu4e"
+              "/usr/local/share/emacs/site-lisp/mu/mu4e")
   ;; Following an org link to a message must work before mu4e has
   ;; loaded; loading mu4e loads mu4e-org, which defines this.
   :commands mu4e-org-open

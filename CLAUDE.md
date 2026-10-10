@@ -99,7 +99,13 @@ after mu4e quits, so message buffers outside mu4e get the default
 identity and smtpmail back buffer-locally, from `message-mode-hook`.  Every mail command (mbsync, msmtp,
 oama) is built with `rjd-mail-command`, which puts
 `rjd-mail-command-prefix` in front: nil inside `claude-dev`, the mail
-container's `docker exec` on the host.  The package's symbols use the
+container's `docker exec -i mail` on the host.  The default is chosen
+when the package loads, by `rjd-mail-default-command-prefix`: the
+container if Emacs is not itself in one and the `setup` playbook has
+written `~/.config/mail-container/` (the container's configuration,
+outside `~/projects`, so no agent can edit what runs beside the
+tokens); nil otherwise.  On the Mac, mu and mu4e come from Homebrew,
+and mu4e's form puts Homebrew's site-lisp on `load-path`.  The package's symbols use the
 `rjd-mail-` prefix, not `rjd/`, because that interface was fixed for
 the calendar to build on.  `rjd-mail-mode` is opt-in, enabled from
 mu4e's form in `init.el`.  ERT tests: `test/rjd-mail-test.el`.

@@ -122,6 +122,50 @@
 
 ;;; Getting mail
 
+;;; Choosing the prefix for this machine
+
+(defmacro rjd-mail-tests--on-machine (spec &rest body)
+  "Run BODY on a made-up machine described by SPEC.
+SPEC is a plist: with :inside-container non-nil the machine is a
+container (its marker file exists); with :mail-container non-nil the
+host has the mail container's configuration directory."
+  (declare (indent 1))
+  `(let* ((root (make-temp-file "rjd-mail-machine" t))
+          (marker (expand-file-name "dockerenv" root))
+          (config (expand-file-name "mail-container" root))
+          (rjd-mail-container-marker-files (list marker))
+          (rjd-mail-container-directory config))
+     (unwind-protect
+         (progn
+           (when (plist-get ',spec :inside-container)
+             (write-region "" nil marker))
+           (when (plist-get ',spec :mail-container)
+             (make-directory config))
+           ,@body)
+       (delete-directory root t))))
+
+(ert-deftest rjd-mail-default-prefix-on-a-host-with-the-mail-container ()
+  "On the host the mail commands go into the mail container."
+  (rjd-mail-tests--on-machine (:mail-container t)
+    (should (equal (rjd-mail-default-command-prefix)
+                   '("docker" "exec" "-i" "mail")))))
+
+(ert-deftest rjd-mail-default-prefix-inside-a-container ()
+  "Inside claude-dev the tools run directly, whatever else is there."
+  (rjd-mail-tests--on-machine (:inside-container t :mail-container t)
+    (should-not (rjd-mail-default-command-prefix))))
+
+(ert-deftest rjd-mail-default-prefix-on-a-host-without-the-mail-container ()
+  "A machine without the mail container -- leroy, say -- has no prefix."
+  (rjd-mail-tests--on-machine ()
+    (should-not (rjd-mail-default-command-prefix))))
+
+(ert-deftest rjd-mail-default-prefix-names-the-container ()
+  (rjd-mail-tests--on-machine (:mail-container t)
+    (let ((rjd-mail-container-name "post"))
+      (should (equal (rjd-mail-default-command-prefix)
+                     '("docker" "exec" "-i" "post"))))))
+
 (ert-deftest rjd-mail-get-mail-command-without-prefix ()
   (let ((rjd-mail-command-prefix nil)
         (rjd-mail-accounts (list rjd-mail-tests--gmail rjd-mail-tests--other)))
