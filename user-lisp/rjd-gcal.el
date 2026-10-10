@@ -30,6 +30,11 @@
 ;; `user-emacs-directory' -- persist/, request/ and
 ;; .org-generic-id-locations -- none of it an OAuth token.
 ;;
+;; The calendar is fetched only where mail can run, as
+;; `rjd-mail-available-p' decides: the token comes from the same tools.
+;; Elsewhere `rjd/gcal-active-account' is nil, so there is no timer and
+;; no fetch, though the calendar file is still made, empty.
+;;
 ;; Enable with `rjd/gcal-mode'.  Turning it off is the way round a bad
 ;; upgrade.
 
@@ -49,9 +54,17 @@
 
 (defcustom rjd/gcal-account nil
   "Address of the Google account whose calendar is fetched, or nil.
-oama is asked for this account's token.  Nil leaves the calendar off."
+oama is asked for this account's token.  Nil leaves the calendar off,
+and so does a machine where mail cannot run: see
+`rjd/gcal-active-account'."
   :type '(choice (const :tag "None" nil) string)
   :group 'rjd/gcal)
+
+(defun rjd/gcal-active-account ()
+  "The account whose calendar is fetched here: `rjd/gcal-account', or nil.
+Nil where `rjd-mail-available-p' says mail cannot run, since the token
+comes from the same tools, so such a machine fetches nothing."
+  (and (rjd-mail-available-p) rjd/gcal-account))
 
 (defcustom rjd/gcal-calendar-id nil
   "ID of the calendar to fetch, or nil for the account's primary calendar.
@@ -190,26 +203,29 @@ the only sign of progress there is."
 
 ;;;###autoload
 (defun rjd/gcal-fetch ()
-  "Fetch the calendar of `rjd/gcal-account' into `rjd/gcal-file'.
+  "Fetch the calendar of `rjd/gcal-active-account' into `rjd/gcal-file'.
 Only ever reads from Google: this is `org-gcal-fetch', which is
 org-gcal's sync with the export step skipped, and the token's scope is
 read-only besides.  The fetch runs in the background; once its events
 have arrived the file is saved and any agenda redone.  Does nothing
-without an account."
+without an account, or where mail cannot run."
   (interactive)
-  (if (not rjd/gcal-account)
-      (when (called-interactively-p 'any)
-        (user-error "No calendar: `rjd/gcal-account' is not set"))
-    (require 'org-gcal)
-    (rjd/gcal--ensure-file)
-    (setq org-gcal-fetch-file-alist
-          (list (cons (or rjd/gcal-calendar-id rjd/gcal-account)
-                      (expand-file-name rjd/gcal-file))))
-    (setq rjd/gcal--last-fetch (current-time))
-    (condition-case err
-        (org-gcal-fetch)
-      (error (message "rjd-gcal: fetching the calendar failed: %s"
-                      (error-message-string err))))))
+  (if-let* ((account (rjd/gcal-active-account)))
+      (progn
+        (require 'org-gcal)
+        (rjd/gcal--ensure-file)
+        (setq org-gcal-fetch-file-alist
+              (list (cons (or rjd/gcal-calendar-id account)
+                          (expand-file-name rjd/gcal-file))))
+        (setq rjd/gcal--last-fetch (current-time))
+        (condition-case err
+            (org-gcal-fetch)
+          (error (message "rjd-gcal: fetching the calendar failed: %s"
+                          (error-message-string err)))))
+    (when (called-interactively-p 'any)
+      (user-error (if rjd/gcal-account
+                      "No calendar: mail cannot run on this machine"
+                    "No calendar: `rjd/gcal-account' is not set")))))
 
 (defun rjd/gcal--fetch-on-agenda ()
   "Make sure the calendar file exists, and fetch unless one just ran.
@@ -226,8 +242,10 @@ On `org-agenda-mode-hook', which runs before the agenda reads its files."
 ;;;###autoload
 (define-minor-mode rjd/gcal-mode
   "Fetch Google Calendar into org-agenda, read-only, with tokens from oama.
-The calendar of `rjd/gcal-account' is fetched into `rjd/gcal-file' when
-the agenda opens, and every `rjd/gcal-fetch-interval' seconds.  org-gcal
+The calendar of `rjd/gcal-active-account' is fetched into
+`rjd/gcal-file' when the agenda opens, and every
+`rjd/gcal-fetch-interval' seconds -- the timer only if there is an
+active account when the mode is turned on.  org-gcal
 asks for its token through `oauth2-auto-access-token', which this
 advises to answer from oama -- see the commentary of rjd-gcal.el."
   :global t
@@ -243,7 +261,7 @@ advises to answer from oama -- see the commentary of rjd-gcal.el."
         (add-hook 'org-agenda-mode-hook #'rjd/gcal--fetch-on-agenda)
         (add-hook 'org-gcal-after-update-entry-functions
                   #'rjd/gcal--event-updated)
-        (when rjd/gcal-fetch-interval
+        (when (and rjd/gcal-fetch-interval (rjd/gcal-active-account))
           (setq rjd/gcal--timer
                 (run-at-time rjd/gcal-fetch-interval rjd/gcal-fetch-interval
                              #'rjd/gcal-fetch))))

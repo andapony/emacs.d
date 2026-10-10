@@ -104,7 +104,13 @@ when the package loads, by `rjd-mail-default-command-prefix`: the
 container if Emacs is not itself in one and the `setup` playbook has
 written `~/.config/mail-container/` (the container's configuration,
 outside `~/projects`, so no agent can edit what runs beside the
-tokens); nil otherwise.  On the Mac, mu and mu4e come from Homebrew,
+tokens); nil otherwise.  Declared accounts, and the calendar account,
+take effect only where `rjd-mail-available-p` says mail can run: where
+the prefix is set, or inside a container with `mbsync` on `exec-path`
+(`claude-dev` with the dev toolchain).  On leroy or bulldog Emacs
+starts as if none were declared; `rjd-mail-enabled` forces it either
+way.  `private.el` only declares data; the decision stays here, under
+test.  On the Mac, mu and mu4e come from Homebrew,
 and mu4e's form puts Homebrew's site-lisp on `load-path`.  The package's symbols use the
 `rjd-mail-` prefix, not `rjd/`, because that interface was fixed for
 the calendar to build on.  `rjd-mail-mode` is opt-in, enabled from
@@ -115,7 +121,8 @@ mu4e's form in `init.el`.  ERT tests: `test/rjd-mail-test.el`.
 Google Calendar reaches the agenda through `rjd-gcal` (user-lisp), which
 has org-gcal fetch one account's calendar, read-only, into
 `~/org-agenda/gcal-gmail-personal.org`.  The account is set in
-`private.el` as `rjd/gcal-account`; without it nothing is fetched.  The
+`private.el` as `rjd/gcal-account`; without it, or where mail cannot
+run (see Mail), nothing is fetched and there is no timer.  The
 token comes from oama, through `rjd-mail-command`, by `:around` advice
 on oauth2-auto's `oauth2-auto-access-token` -- an upgrade of org-gcal or
 oauth2-auto can break that silently, the calendar simply no longer

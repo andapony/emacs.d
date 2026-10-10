@@ -51,6 +51,11 @@
 
 ;;; Fixtures
 
+;; Mail can run, for every test that does not say otherwise: the tests
+;; are about what declared accounts do where they take effect, and the
+;; machine running them need not have the mail tools.
+(setq rjd-mail-enabled t)
+
 (defconst rjd-mail-tests--gmail
   '(:name "gmail-test"
     :address "someone@example.com"
@@ -165,6 +170,73 @@ host has the mail container's configuration directory."
     (let ((rjd-mail-container-name "post"))
       (should (equal (rjd-mail-default-command-prefix)
                      '("docker" "exec" "-i" "post"))))))
+
+
+;;; Whether mail can run on this machine
+
+(defmacro rjd-mail-tests--with-toolchain (programs &rest body)
+  "Run BODY with only PROGRAMS, a list of names, on `exec-path'."
+  (declare (indent 1))
+  `(let* ((bin (make-temp-file "rjd-mail-bin" t))
+          (exec-path (list bin)))
+     (unwind-protect
+         (progn
+           (dolist (program ,programs)
+             (let ((file (expand-file-name program bin)))
+               (write-region "" nil file)
+               (set-file-modes file #o755)))
+           ,@body)
+       (delete-directory bin t))))
+
+(ert-deftest rjd-mail-available-on-the-host-with-the-mail-container ()
+  "The iMac: the tools are in the mail container, so none on the host."
+  (rjd-mail-tests--on-machine (:mail-container t)
+    (rjd-mail-tests--with-toolchain nil
+      (let ((rjd-mail-enabled 'auto)
+            (rjd-mail-command-prefix (rjd-mail-default-command-prefix)))
+        (should (rjd-mail-available-p))))))
+
+(ert-deftest rjd-mail-available-in-a-container-with-the-dev-toolchain ()
+  "claude-dev, with mbsync installed for development."
+  (rjd-mail-tests--on-machine (:inside-container t)
+    (rjd-mail-tests--with-toolchain '("mbsync")
+      (let ((rjd-mail-enabled 'auto)
+            (rjd-mail-command-prefix (rjd-mail-default-command-prefix)))
+        (should (rjd-mail-available-p))))))
+
+(ert-deftest rjd-mail-unavailable-in-a-container-without-the-toolchain ()
+  (rjd-mail-tests--on-machine (:inside-container t)
+    (rjd-mail-tests--with-toolchain nil
+      (let ((rjd-mail-enabled 'auto)
+            (rjd-mail-command-prefix (rjd-mail-default-command-prefix)))
+        (should-not (rjd-mail-available-p))))))
+
+(ert-deftest rjd-mail-unavailable-on-a-host-without-the-mail-container ()
+  "leroy or bulldog: no mail container, and their own mbsync, if any,
+is not set up for these accounts."
+  (rjd-mail-tests--on-machine ()
+    (rjd-mail-tests--with-toolchain '("mbsync")
+      (let ((rjd-mail-enabled 'auto)
+            (rjd-mail-command-prefix (rjd-mail-default-command-prefix)))
+        (should-not (rjd-mail-available-p))))))
+
+(ert-deftest rjd-mail-available-when-a-prefix-is-set-by-hand ()
+  "A prefix set in private.el says where the tools are."
+  (rjd-mail-tests--on-machine ()
+    (rjd-mail-tests--with-toolchain nil
+      (let ((rjd-mail-enabled 'auto)
+            (rjd-mail-command-prefix '("ssh" "mailhost")))
+        (should (rjd-mail-available-p))))))
+
+(ert-deftest rjd-mail-enabled-overrides-the-machine ()
+  (rjd-mail-tests--on-machine (:mail-container t)
+    (let ((rjd-mail-command-prefix (rjd-mail-default-command-prefix)))
+      (let ((rjd-mail-enabled nil))
+        (should-not (rjd-mail-available-p)))))
+  (rjd-mail-tests--on-machine ()
+    (let ((rjd-mail-command-prefix nil)
+          (rjd-mail-enabled t))
+      (should (rjd-mail-available-p)))))
 
 (ert-deftest rjd-mail-get-mail-command-without-prefix ()
   (let ((rjd-mail-command-prefix nil)
@@ -497,6 +569,53 @@ next sync removes Gmail's Starred label (#18)."
     (should (equal mu4e-contexts nil))
     (should (equal (funcall mu4e-get-mail-command) "true"))
     (rjd-mail-mode -1)))
+
+;;; Where mail cannot run
+
+(defmacro rjd-mail-tests--where-mail-cannot-run (&rest body)
+  "Run BODY with an account declared on a machine where mail cannot run.
+The machine is leroy, say: no mail container, no prefix, not a
+container -- decided by the machine, not forced."
+  (declare (indent 0))
+  `(rjd-mail-tests--on-machine ()
+     (let ((rjd-mail-enabled 'auto)
+           (rjd-mail-command-prefix nil)
+           (rjd-mail-accounts (list rjd-mail-tests--gmail)))
+       ,@body)))
+
+(ert-deftest rjd-mail-mode-where-mail-cannot-run ()
+  "Declared accounts make no contexts and fetch nothing there."
+  (rjd-mail-tests--where-mail-cannot-run
+    (let ((mu4e-contexts nil)
+          (mu4e-get-mail-command "true")
+          (rjd-mail-mode nil)
+          (rjd-mail--before-mode nil))
+      (rjd-mail-mode 1)
+      (unwind-protect
+          (progn
+            (should (equal mu4e-contexts nil))
+            (should (equal (funcall mu4e-get-mail-command) "true")))
+        (rjd-mail-mode -1)))))
+
+(ert-deftest rjd-mail-without-junk-where-mail-cannot-run ()
+  (rjd-mail-tests--where-mail-cannot-run
+    (should (equal (rjd-mail-without-junk "flag:unread") "flag:unread"))))
+
+(ert-deftest rjd-mail-file-flagged-new-where-mail-cannot-run ()
+  "No account's maildir is touched."
+  (rjd-mail-tests--where-mail-cannot-run
+    (let ((root (make-temp-file "rjd-mail-test-" t)))
+      (unwind-protect
+          (progn
+            (make-directory (format "%s/gmail-test/inbox/new" root) t)
+            (make-directory (format "%s/gmail-test/inbox/cur" root) t)
+            (write-region "" nil (format "%s/gmail-test/inbox/new/1.h,U=1:2,F"
+                                         root))
+            (rjd-mail-file-flagged-new root)
+            (should (equal (rjd-mail-tests--maildir-files root)
+                           '("gmail-test/inbox/new/1.h,U=1:2,F"))))
+        (delete-directory root t)))))
+
 
 ;;; Mail written outside mu4e
 
