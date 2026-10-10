@@ -1446,7 +1446,20 @@ the abbrevs in the major mode's abbrev table rather than the global one."
       :query ,(lambda () (rjd-mail-without-junk "date:7d..now AND NOT flag:trashed AND NOT maildir:/Spam")))
      (:name "Flagged" :key ?f :query "flag:flagged")))
   :config
-  (rjd-mail-mode 1))
+  (rjd-mail-mode 1)
+  ;; Meeting invitations: a message's text/calendar part is shown with
+  ;; Accept, Tentative and Decline buttons.  The buttons are Gnus's;
+  ;; mu4e-icalendar takes over their reply in a mu4e view, composing it
+  ;; to the organiser as a reply to the invitation, so the context that
+  ;; matches the invitation sends it, through msmtp for a Gmail account.
+  ;; The reply opens as a draft to be sent with C-c C-c.
+  ;;
+  ;; Nothing is written to org or to the diary on answering: org-gcal's
+  ;; fetch brings accepted events into the agenda, and an entry here
+  ;; would duplicate them.  So `gnus-icalendar-org-setup' is never
+  ;; called, and `mu4e-icalendar-diary-file' stays nil.
+  (require 'mu4e-icalendar)
+  (gnus-icalendar-setup))
 
 ;;; Feeds
 

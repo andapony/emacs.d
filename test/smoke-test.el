@@ -210,6 +210,79 @@ depends on the private.el in use, so the contexts are not checked."
   (should (eq mu4e-context-policy 'pick-first))
   (should (eq mu4e-compose-context-policy 'ask)))
 
+(defconst rjd/smoke-invitation
+  (concat "MIME-Version: 1.0\n"
+          "Content-Type: text/calendar; charset=UTF-8; method=REQUEST\n"
+          "\n"
+          "BEGIN:VCALENDAR\r\n"
+          "PRODID:-//rjd smoke test//EN\r\n"
+          "VERSION:2.0\r\n"
+          "METHOD:REQUEST\r\n"
+          "BEGIN:VEVENT\r\n"
+          "DTSTART:20261012T170000Z\r\n"
+          "DTEND:20261012T173000Z\r\n"
+          "DTSTAMP:20261010T120000Z\r\n"
+          "ORGANIZER;CN=Organiser:mailto:organiser@test.invalid\r\n"
+          "UID:rjd-smoke-invitation@test.invalid\r\n"
+          "ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;"
+          "RSVP=TRUE;CN=me@test.invalid:mailto:me@test.invalid\r\n"
+          "SEQUENCE:0\r\n"
+          "STATUS:CONFIRMED\r\n"
+          "SUMMARY:Smoke test meeting\r\n"
+          "END:VEVENT\r\n"
+          "END:VCALENDAR\r\n")
+  "A message that is a meeting invitation to me@test.invalid.")
+
+(defun rjd/smoke-render-invitation ()
+  "Render `rjd/smoke-invitation' as a mu4e view shows it inline.
+Return the labels of the buttons it carries, in order.  The invitation
+is addressed to `user-mail-address', which is let-bound to its attendee
+as entering that account's context would."
+  (let ((user-mail-address "me@test.invalid")
+        (handle (with-temp-buffer
+                  (insert rjd/smoke-invitation)
+                  (mm-dissect-buffer t))))
+    (with-temp-buffer
+      (should (mm-inlinable-p handle))
+      (mm-display-inline handle)
+      (let ((labels nil)
+            (pos (point-min)))
+        (while (setq pos (text-property-not-all pos (point-max)
+                                                'gnus-callback nil))
+          (let ((end (next-single-property-change pos 'gnus-callback
+                                                  nil (point-max))))
+            (push (string-trim (buffer-substring-no-properties pos end)
+                               "\\[ " " \\]")
+                  labels)
+            (setq pos end)))
+        (nreverse labels)))))
+
+(ert-deftest rjd/smoke-mu4e-invitations-are-answered-from-mu4e ()
+  "An invitation in mu4e offers Accept, Tentative and Decline.
+Loading mu4e loads mu4e-icalendar, so that pressing one replies from
+mu4e -- the button's function is Gnus's, which mu4e-icalendar takes
+over in a mu4e view.  Skipped where mu4e is not installed."
+  (skip-unless (locate-library "mu4e"))
+  (require 'mu4e)
+  (should (featurep 'mu4e-icalendar))
+  (should (equal (rjd/smoke-render-invitation)
+                 '("Accept" "Tentative" "Decline"))))
+
+(ert-deftest rjd/smoke-mu4e-invitations-make-no-org-entry ()
+  "Answering an invitation adds it neither to org nor to the diary.
+The calendar fetch brings accepted events into the agenda; an entry
+written on accepting would duplicate them.  Gnus's org integration
+would also put Export to Org and Show Agenda buttons on the
+invitation.  Skipped where mu4e is not installed."
+  (skip-unless (locate-library "mu4e"))
+  (require 'mu4e)
+  (should (featurep 'mu4e-icalendar))
+  (should-not gnus-icalendar-org-enabled-p)
+  (should-not mu4e-icalendar-diary-file)
+  (should-not (seq-intersection (rjd/smoke-render-invitation)
+                                '("Export to Org" "Update Org Entry"
+                                  "Show Agenda" "Show Org Entry"))))
+
 (ert-deftest rjd/smoke-mu4e-links-follow-before-mu4e-loads ()
   "An org mu4e: link is followed by `mu4e-org-open', autoloaded."
   (require 'org)
