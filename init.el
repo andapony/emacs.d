@@ -656,6 +656,11 @@ traversing corrupts its iteration."
       (file+olp+datetree "~/Sync/org/heirloom.org" "Heirloom")
       "* %^{Task description} :%^{Tag|misc|meeting|review|code}:\n%U"
       :clock-in t :clock-keep t)
+     ;; org-capture creates the "Cetos" heading at the end of the file if it
+     ;; is missing, so this needs no setup in projects.org.
+     ("c" "Cetos task" entry
+      (file+headline "~/org-agenda/projects.org" "Cetos")
+      "* TODO %?\n  %U" :prepend nil :empty-lines 1)
      )))
 
 ;; Settings for `org-icalendar-combine-agenda-files', which writes the
