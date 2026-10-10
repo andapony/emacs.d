@@ -79,6 +79,11 @@ and optionally:
   :sent-messages-behavior
               `mu4e-sent-messages-behavior' in this context; default
               `delete', since Gmail files sent mail itself
+  :trash-without-flag
+              `mu4e-trash-without-flag' in this context; default t.
+              Gmail needs it: a message moved to Trash with the trashed
+              flag is expunged by mbsync rather than uploaded, so on the
+              server it would only leave the Inbox, not reach Trash
   :mbsync-group
               the mbsync channel or group that syncs the account;
               default :name"
@@ -127,7 +132,11 @@ accounts it is \"true\", mu4e's own default, so an update only indexes."
     (mu4e-trash-folder . ,(rjd-mail--folder account :trash))
     (mu4e-refile-folder . ,(rjd-mail--folder account :refile))
     (mu4e-sent-messages-behavior
-     . ,(or (plist-get account :sent-messages-behavior) 'delete))))
+     . ,(or (plist-get account :sent-messages-behavior) 'delete))
+    (mu4e-trash-without-flag
+     . ,(if (plist-member account :trash-without-flag)
+            (plist-get account :trash-without-flag)
+          t))))
 
 (defvar rjd-mail--saved nil
   "The global values a context replaced, to restore on leaving it.

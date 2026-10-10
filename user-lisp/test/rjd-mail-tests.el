@@ -45,6 +45,7 @@
 (defvar mu4e-trash-folder)
 (defvar mu4e-refile-folder)
 (defvar mu4e-sent-messages-behavior)
+(defvar mu4e-trash-without-flag)
 (defvar mu4e-contexts)
 (defvar mu4e-get-mail-command)
 
@@ -66,6 +67,7 @@
     :folders (:inbox "/INBOX" :sent "/Sent" :drafts "/Drafts"
               :trash "/Trash" :refile "/Archive" :spam "/Junk")
     :sent-messages-behavior sent
+    :trash-without-flag nil
     :mbsync-group "other-group")
   "An account that overrides every default.")
 
@@ -80,6 +82,7 @@
          (mu4e-trash-folder "/Trash")
          (mu4e-refile-folder "/Archive")
          (mu4e-sent-messages-behavior 'sent)
+         (mu4e-trash-without-flag nil)
          (rjd-mail--saved nil))
      ,@body))
 
@@ -162,7 +165,10 @@
     (should (equal mu4e-drafts-folder "/gmail-test/drafts"))
     (should (equal mu4e-trash-folder "/gmail-test/trash"))
     (should (equal mu4e-refile-folder "/gmail-test/all"))
-    (should (eq mu4e-sent-messages-behavior 'delete))))
+    (should (eq mu4e-sent-messages-behavior 'delete))
+    ;; Trashed mail must reach Gmail's Trash: with the trashed flag,
+    ;; mbsync would expunge it instead, and Gmail would only archive it.
+    (should (eq mu4e-trash-without-flag t))))
 
 (ert-deftest rjd-mail-entering-sets-declared-folders-and-sent ()
   (rjd-mail-tests--needs-mu4e)
@@ -172,7 +178,8 @@
     (should (equal user-mail-address "other@example.org"))
     (should (equal mu4e-sent-folder "/other/Sent"))
     (should (equal mu4e-refile-folder "/other/Archive"))
-    (should (eq mu4e-sent-messages-behavior 'sent))))
+    (should (eq mu4e-sent-messages-behavior 'sent))
+    (should (eq mu4e-trash-without-flag nil))))
 
 (ert-deftest rjd-mail-leaving-restores-fastmail-default ()
   (rjd-mail-tests--needs-mu4e)
@@ -187,7 +194,8 @@
       (should (equal mu4e-drafts-folder "/Drafts"))
       (should (equal mu4e-trash-folder "/Trash"))
       (should (equal mu4e-refile-folder "/Archive"))
-      (should (eq mu4e-sent-messages-behavior 'sent)))))
+      (should (eq mu4e-sent-messages-behavior 'sent))
+      (should (eq mu4e-trash-without-flag nil)))))
 
 (ert-deftest rjd-mail-switching-between-accounts-then-leaving ()
   "Switching from one account to another still ends on the default."
