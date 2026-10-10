@@ -584,6 +584,33 @@ next sync removes Gmail's Starred label (#18)."
       (delete-directory root t))))
 
 
+;;; Syncing from startup
+
+(defmacro rjd/mail-test-recording-mu4e-starts (&rest body)
+  "Run BODY with `mu4e' stubbed to record its calls in `starts'.
+The stub stands for mu4e itself, which `rjd/mail-start-syncing' starts
+in the background; its argument lists are pushed onto `starts'."
+  (declare (indent 0))
+  `(let ((starts nil))
+     (cl-letf (((symbol-function 'mu4e)
+                (lambda (&rest args) (push args starts))))
+       ,@body)))
+
+(ert-deftest rjd/mail-start-syncing-starts-mu4e-in-the-background ()
+  "With accounts active, mu4e starts quietly, so its updates run."
+  (rjd/mail-test-recording-mu4e-starts
+    (let ((rjd/mail-accounts (list rjd/mail-test-gmail)))
+      (rjd/mail-start-syncing)
+      (should (equal starts '((t)))))))
+
+(ert-deftest rjd/mail-start-syncing-without-accounts ()
+  "Nothing declared: mu4e is not started."
+  (rjd/mail-test-recording-mu4e-starts
+    (let ((rjd/mail-accounts nil))
+      (rjd/mail-start-syncing)
+      (should-not starts))))
+
+
 ;;; The mode
 
 (ert-deftest rjd/mail-mode-installs-and-restores ()
@@ -685,6 +712,13 @@ container -- decided by the machine, not forced."
 (ert-deftest rjd/mail-search-without-active-accounts ()
   (rjd/mail-test-where-mail-cannot-run
     (should (equal (rjd/mail-search-query "from:alice") "from:alice"))))
+
+(ert-deftest rjd/mail-start-syncing-where-mail-cannot-run ()
+  "leroy or bulldog: the accounts are declared, but mu4e is not started."
+  (rjd/mail-test-where-mail-cannot-run
+    (rjd/mail-test-recording-mu4e-starts
+      (rjd/mail-start-syncing)
+      (should-not starts))))
 
 (ert-deftest rjd/mail-file-flagged-new-where-mail-cannot-run ()
   "No account's maildir is touched."

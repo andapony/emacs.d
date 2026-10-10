@@ -1359,6 +1359,9 @@ the abbrevs in the major mode's abbrev table rather than the global one."
 ;; mu4e fetches mail itself, every `mu4e-update-interval' seconds while
 ;; it runs, through `rjd/mail-get-mail-command': mbsync, behind
 ;; `rjd/mail-command-prefix'.  There is no separate timer to overlap it.
+;; Emacs starts mu4e in the background, so mail syncs without mu4e
+;; having been opened -- only where accounts take effect, which
+;; `rjd/mail-start-syncing' decides.
 ;; mu finds the maildir itself -- the root given to `mu init' -- so
 ;; there is no maildir setting here.
 (use-package mu4e
@@ -1377,6 +1380,8 @@ the abbrevs in the major mode's abbrev table rather than the global one."
   ;; loaded; loading mu4e loads mu4e-org, which defines this.
   :commands mu4e-org-open
   :bind ("C-c M" . mu4e)
+  :init
+  (add-hook 'emacs-startup-hook #'rjd/mail-start-syncing)
   :custom
   (mu4e-update-interval 300)
   ;; On entering mu4e, take the first context rather than asking: mail

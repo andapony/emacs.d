@@ -68,6 +68,7 @@
 (require 'seq)
 
 (declare-function make-mu4e-context "mu4e-context")
+(declare-function mu4e "mu4e")
 (defvar mu4e-contexts)
 (defvar mu4e-get-mail-command)
 (defvar mu4e-query-rewrite-function)
@@ -485,6 +486,24 @@ so every index sees the flags of mail mbsync has just put in new/.
 Does nothing before mu4e has started and knows the root."
   (when-let* ((root (ignore-errors (mu4e-root-maildir))))
     (rjd/mail-file-flagged-new root)))
+
+
+;;; Syncing from startup
+
+;;;###autoload
+(defun rjd/mail-start-syncing ()
+  "Start mu4e in the background, so mail syncs without opening it.
+For `emacs-startup-hook'.  mu4e fetches and indexes every
+`mu4e-update-interval' seconds, but only once it has started, which
+otherwise waits for \\[mu4e].  Started with its BACKGROUND argument,
+it shows no window.
+
+Only where accounts are active -- see `rjd/mail-active-accounts' -- so
+leroy and bulldog, and a machine with none declared, start nothing."
+  (when (rjd/mail-active-accounts)
+    ;; An error here would stop the rest of `emacs-startup-hook'.
+    (with-demoted-errors "rjd-mail: starting mu4e in the background: %S"
+      (mu4e t))))
 
 
 ;;; Mode

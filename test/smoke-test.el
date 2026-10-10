@@ -284,6 +284,14 @@ invitation.  Skipped where mu4e is not installed."
                                 '("Export to Org" "Update Org Entry"
                                   "Show Agenda" "Show Org Entry"))))
 
+(ert-deftest rjd/smoke-mail-syncs-from-startup ()
+  "Starting Emacs starts mu4e's background updates, through rjd-mail.
+Whether mu4e starts is for `rjd/mail-start-syncing' to decide, by the
+machine and the accounts, so only the hook is checked; batch Emacs
+never runs `emacs-startup-hook'."
+  (should (memq #'rjd/mail-start-syncing emacs-startup-hook))
+  (should (fboundp 'rjd/mail-start-syncing)))
+
 (ert-deftest rjd/smoke-mu4e-links-follow-before-mu4e-loads ()
   "An org mu4e: link is followed by `mu4e-org-open', autoloaded."
   (require 'org)
