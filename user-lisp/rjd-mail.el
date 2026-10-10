@@ -10,6 +10,15 @@
 ;; declared, nothing changes: there are no contexts and mu4e only
 ;; indexes.  So a machine without private.el starts cleanly.
 ;;
+;; Declared accounts count only where mail can run, which
+;; `rjd-mail-available-p' decides, for the calendar in rjd-gcal.el
+;; too: the host with the mail container, and claude-dev with the
+;; development toolchain.  Elsewhere -- leroy, bulldog -- private.el
+;; still declares them, but `rjd-mail-active-accounts' is nil, and
+;; Emacs starts as it does with none declared rather than running an
+;; mbsync that is not set up for them.  `rjd-mail-enabled' overrides
+;; the decision.
+;;
 ;; The global settings -- `user-mail-address', smtpmail and the rest --
 ;; stay the Fastmail default that private.el sets, and they are what
 ;; mail written outside mu4e uses.  Entering a context saves whatever
@@ -107,6 +116,39 @@ for this machine when the package loads, by
                  (repeat string))
   :group 'rjd-mail)
 
+(defvar rjd-mail-toolchain-program "mbsync"
+  "The program whose presence says the mail tools are installed here.
+Inside a container that is claude-dev with the development toolchain;
+see `rjd-mail-available-p'.")
+
+(defcustom rjd-mail-enabled 'auto
+  "Whether the declared accounts and calendar take effect on this machine.
+`auto' asks `rjd-mail-available-p' to decide from the machine; t and
+nil force them on or off, from private.el."
+  :type '(choice (const :tag "Where mail can run" auto)
+                 (const :tag "Always" t)
+                 (const :tag "Never" nil))
+  :group 'rjd-mail)
+
+(defun rjd-mail-available-p ()
+  "Non-nil if mail can run on this machine, so accounts should count.
+The one place that decides, for mail and calendar alike.  Unless
+`rjd-mail-enabled' forces the answer, mail can run where
+`rjd-mail-command-prefix' reaches the tools -- the host with the mail
+container, or wherever private.el points it -- and inside a container
+with `rjd-mail-toolchain-program' on `exec-path', which is claude-dev
+during development.  Not on a host without the mail container, such
+as leroy or bulldog: any mbsync there is not set up for these accounts.
+
+Elsewhere `rjd-mail-accounts' and `rjd/gcal-account' are ignored, so
+Emacs starts as it would with none declared."
+  (if (eq rjd-mail-enabled 'auto)
+      (and (or rjd-mail-command-prefix
+               (and (seq-some #'file-exists-p rjd-mail-container-marker-files)
+                    (executable-find rjd-mail-toolchain-program)))
+           t)
+    rjd-mail-enabled))
+
 (defconst rjd-mail-gmail-folders
   '(:inbox "/inbox" :sent "/sent" :drafts "/drafts"
     :trash "/trash" :refile "/all" :spam "/spam")
@@ -148,6 +190,12 @@ and optionally:
 
 ;;; Commands
 
+(defun rjd-mail-active-accounts ()
+  "The accounts that take effect here: `rjd-mail-accounts', or nil.
+Nil where `rjd-mail-available-p' says mail cannot run, so that a
+machine without the tools behaves as if none were declared."
+  (and (rjd-mail-available-p) rjd-mail-accounts))
+
 (defun rjd-mail-command (&rest argv)
   "Return ARGV with `rjd-mail-command-prefix' in front.
 ARGV is a command and its arguments, as strings; so is the result."
@@ -155,13 +203,14 @@ ARGV is a command and its arguments, as strings; so is the result."
 
 ;;;###autoload
 (defun rjd-mail-get-mail-command ()
-  "Return the shell command that fetches mail for every declared account.
+  "Return the shell command that fetches mail for every active account.
 For `mu4e-get-mail-command', which runs it through a shell.  With no
-accounts it is \"true\", mu4e's own default, so an update only indexes."
-  (if rjd-mail-accounts
+active accounts -- see `rjd-mail-active-accounts' -- it is \"true\",
+mu4e's own default, so an update only indexes."
+  (if-let* ((accounts (rjd-mail-active-accounts)))
       (mapconcat #'shell-quote-argument
                  (apply #'rjd-mail-command "mbsync"
-                        (mapcar #'rjd-mail--mbsync-group rjd-mail-accounts))
+                        (mapcar #'rjd-mail--mbsync-group accounts))
                  " ")
     "true"))
 
@@ -303,8 +352,8 @@ the account in To or Cc."
 
 (defun rjd-mail-contexts (&optional accounts)
   "Return a mu4e context for each of ACCOUNTS.
-ACCOUNTS defaults to `rjd-mail-accounts'.  With none, nil."
-  (let ((accounts (or accounts rjd-mail-accounts)))
+ACCOUNTS defaults to `rjd-mail-active-accounts'.  With none, nil."
+  (let ((accounts (or accounts (rjd-mail-active-accounts))))
     (when accounts
       (require 'mu4e-context)
       (mapcar (lambda (account)
@@ -324,15 +373,15 @@ ACCOUNTS defaults to `rjd-mail-accounts'.  With none, nil."
 ;;;###autoload
 (defun rjd-mail-without-junk (query)
   "Return mu QUERY with every declared account's Spam and Trash left out.
-QUERY itself when no account is declared."
-  (if rjd-mail-accounts
+QUERY itself when no account is active; see `rjd-mail-active-accounts'."
+  (if-let* ((accounts (rjd-mail-active-accounts)))
       (format "(%s) AND NOT (%s)"
               query
               (mapconcat (lambda (maildir) (concat "maildir:" maildir))
                          (mapcan (lambda (account)
                                    (list (rjd-mail--folder account :spam)
                                          (rjd-mail--folder account :trash)))
-                                 rjd-mail-accounts)
+                                 accounts)
                          " OR "))
     query))
 
@@ -351,8 +400,8 @@ is still unread, since it has no S.  mbsync finds a message by the UID
 in its name, in new/ or cur/, so the move changes nothing on the server.
 
 Only messages with flags move, so the rest stay New.  Only the maildirs
-of `rjd-mail-accounts' are searched."
-  (dolist (account rjd-mail-accounts)
+of `rjd-mail-active-accounts' are searched."
+  (dolist (account (rjd-mail-active-accounts))
     (let ((maildir (concat (directory-file-name root)
                            (plist-get account :maildir))))
       (when (file-directory-p maildir)
@@ -384,7 +433,7 @@ Does nothing before mu4e has started and knows the root."
 
 ;;;###autoload
 (define-minor-mode rjd-mail-mode
-  "Make each account in `rjd-mail-accounts' a mu4e context.
+  "Make each account in `rjd-mail-active-accounts' a mu4e context.
 Also fetch mail for them through `rjd-mail-get-mail-command', and keep
 message buffers outside mu4e on the global default identity.  Turning
 the mode off puts back the contexts and fetch command it replaced, and

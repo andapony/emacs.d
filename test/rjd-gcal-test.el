@@ -66,6 +66,61 @@ org-gcal waits on the promise, so the error reaches its fetch."
       (should (aio-result promise))
       (should-error (funcall (aio-result promise))))))
 
+
+
+;;; Where mail can and cannot run
+
+(defmacro rjd/gcal-test-on-machine (mail-can-run &rest body)
+  "Run BODY with an account declared, on a machine where mail can run or not.
+MAIL-CAN-RUN non-nil is the iMac: the mail container's prefix is set.
+nil is leroy, say: no prefix, and not inside a container.  Fetching is
+stubbed to record into the list `fetches', and the calendar file is a
+temporary one.  `rjd/gcal-mode' is on for BODY."
+  (declare (indent 1))
+  `(let* ((dir (make-temp-file "rjd-gcal-test" t))
+          (rjd/gcal-file (file-name-concat dir "gcal.org"))
+          (rjd/gcal-account "someone@example.com")
+          (rjd/gcal-fetch-interval 900)
+          (rjd-mail-enabled 'auto)
+          (rjd-mail-container-marker-files
+           (list (file-name-concat dir "no-such-marker")))
+          (rjd-mail-command-prefix
+           (and ,mail-can-run '("docker" "exec" "-i" "mail")))
+          (org-agenda-mode-hook nil)
+          (fetches nil))
+     ;; Loaded first, or `rjd/gcal-fetch' loading it would replace the stub.
+     (require 'org-gcal)
+     (cl-letf (((symbol-function 'org-gcal-fetch)
+                (lambda () (push 'fetched fetches))))
+       (unwind-protect
+           (progn (rjd/gcal-mode 1) ,@body)
+         (rjd/gcal-mode -1)
+         (setq rjd/gcal--last-fetch nil)
+         (delete-directory dir t)))))
+
+(defun rjd/gcal-test-timers ()
+  "The timers that would fetch the calendar."
+  (seq-filter (lambda (timer) (eq (timer--function timer) #'rjd/gcal-fetch))
+              timer-list))
+
+(ert-deftest rjd/gcal-where-mail-cannot-run-nothing-is-fetched ()
+  "No timer, and neither the agenda nor the command fetches.
+The calendar file is still made, empty, so the agenda does not ask
+about a missing file."
+  (rjd/gcal-test-on-machine nil
+    (should-not (rjd/gcal-test-timers))
+    (run-hooks 'org-agenda-mode-hook)
+    (rjd/gcal-fetch)
+    (should-not fetches)
+    (should (file-exists-p rjd/gcal-file))))
+
+(ert-deftest rjd/gcal-where-mail-can-run-the-calendar-is-fetched ()
+  "The iMac: a timer, and opening the agenda fetches."
+  (rjd/gcal-test-on-machine t
+    (should (= (length (rjd/gcal-test-timers)) 1))
+    (run-hooks 'org-agenda-mode-hook)
+    (should (equal fetches '(fetched)))))
+
 (provide 'rjd-gcal-test)
 
 ;;; rjd-gcal-test.el ends here
