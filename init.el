@@ -585,10 +585,14 @@ traversing corrupts its iteration."
   ;; org-agenda block.  This is the only place it is set: org's own
   ;; commands for editing it are kept from saving into custom.el, which
   ;; would override it -- see `rjd/org-agenda-files-for-session'.
+  ;;
+  ;; The last file is the Google Calendar, fetched by rjd-gcal (see
+  ;; ";;; Calendar" below), whose `rjd/gcal-file' must name the same file.
   (org-agenda-files '("~/org-agenda/inbox.org"
                       "~/org-agenda/projects.org"
                       "~/org-agenda/areas.org"
-                      "~/org-agenda/someday.org"))
+                      "~/org-agenda/someday.org"
+                      "~/org-agenda/gcal-gmail-personal.org"))
   (org-directory "~/org-agenda")
   (org-ellipsis "…")
   (org-hide-emphasis-markers t)
@@ -696,16 +700,74 @@ traversing corrupts its iteration."
 ;; calls it -- the export is run on demand or from outside Emacs.
 (use-package ox-icalendar
   :defer t
+  :preface
+  (defun rjd/icalendar-combine-without-gcal (combine &rest args)
+    "Run COMBINE with ARGS, leaving the Google Calendar file out.
+Advice around `org-icalendar-combine-agenda-files', which COMBINE is.
+That file's events came from Google, and exported they would come back
+into another calendar as copies -- see `rjd/gcal-file-p'."
+    (let ((org-agenda-files
+           (seq-remove #'rjd/gcal-file-p (org-agenda-files t))))
+      (apply combine args)))
   :custom
   (org-icalendar-combined-agenda-file "~/Sync/org/agenda.ics")
   (org-icalendar-include-todo t)
   (org-icalendar-use-deadline '(event-if-todo event-if-not-todo))
-  (org-icalendar-use-scheduled '(event-if-todo)))
+  (org-icalendar-use-scheduled '(event-if-todo))
+  :config
+  (advice-add 'org-icalendar-combine-agenda-files
+              :around #'rjd/icalendar-combine-without-gcal))
 
 ;; Loaded from vendor/, which the setup repo symlinks into place; tolerate
 ;; its absence so the rest of this file still loads on a bare checkout.
 (when (require 'rjd-org-sync nil :noerror)
   (rjd/org-sync-setup))
+
+;;; Calendar
+
+;;
+;; Google Calendar, read-only, in the agenda: org-gcal fetches it into
+;; one org file, with a token from oama, and is never asked to sync.
+;; docs/adr/0001-mail-and-calendar-architecture.md has the reasons.  The
+;; account is set in private.el, as `rjd/gcal-account'; without it
+;; nothing is fetched.  The file is the last of `org-agenda-files', and
+;; is kept out of the .ics export above and out of org-sync, whose file
+;; set is the setup repo's.
+(use-package org-gcal
+  :ensure t
+  :defer t
+  :custom
+  ;; org-gcal warns at load unless these are set, but its own OAuth flow
+  ;; never runs: rjd-gcal answers its token requests from oama.  So
+  ;; they are placeholders, and no OAuth client or token file exists for
+  ;; it.
+  (org-gcal-client-id "unused: rjd-gcal takes the token from oama")
+  (org-gcal-client-secret "unused: rjd-gcal takes the token from oama")
+  ;; A fetch runs on a timer; a notification each time would be noise.
+  (org-gcal-notify-p nil)
+  ;; The default asks, in the middle of a background fetch, whether to
+  ;; drop an event cancelled in Google.  It only edits the local file.
+  (org-gcal-remove-api-cancelled-events t)
+  :config
+  ;; org-gcal creates an event in Google when a heading is captured or
+  ;; refiled into the calendar file.  The read-only scope would refuse
+  ;; it, but nothing should try.  Its own `with-eval-after-load's add
+  ;; these hooks, and ran first, so these remove them after.
+  (with-eval-after-load 'org-capture
+    (remove-hook 'org-capture-after-finalize-hook #'org-gcal--capture-post))
+  (with-eval-after-load 'org-refile
+    (remove-hook 'org-after-refile-insert-hook #'org-gcal--refile-post)))
+
+;; A local package in user-lisp/.  Its mode advises oauth2-auto, a hook
+;; that an upgrade can break silently -- the calendar just stops being
+;; fetched.  If it disappears from the agenda, rjd-gcal.el's commentary
+;; is the first place to look, and turning the mode off is the way round.
+(use-package rjd-gcal
+  :demand t
+  :custom
+  (rjd/gcal-file "~/org-agenda/gcal-gmail-personal.org")
+  :config
+  (rjd/gcal-mode 1))
 
 ;;; Appearance
 

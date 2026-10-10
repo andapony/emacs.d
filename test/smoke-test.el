@@ -85,6 +85,19 @@ Warnings that `rjd/smoke-tolerated-warning-p' accepts are left out."
   (unless (rjd/smoke-tolerated-warning-p type)
     (push (list type message) rjd/smoke-load-warnings)))
 
+(defun rjd/smoke-run-due-timers ()
+  "Run every timer that is due, as returning to the command loop would.
+One wait on process output runs only the first due timer before it
+returns, and other timers fall due in a long run -- org-persist's
+hourly one, for instance -- so wait until none is left, for at most a
+second."
+  (let ((deadline (+ (float-time) 1)))
+    (while (and (< (float-time) deadline)
+                (seq-some (lambda (timer)
+                            (time-less-p (timer--time timer) nil))
+                          timer-list))
+      (accept-process-output nil 0.05))))
+
 (defun rjd/smoke-main-checkout ()
   "The main checkout of the repository holding `rjd/smoke-checkout'.
 That is the parent of git's common directory, which a worktree shares
@@ -144,7 +157,8 @@ A value saved in custom.el would win over init.el's `:custom'."
                  '("~/org-agenda/inbox.org"
                    "~/org-agenda/projects.org"
                    "~/org-agenda/areas.org"
-                   "~/org-agenda/someday.org"))))
+                   "~/org-agenda/someday.org"
+                   "~/org-agenda/gcal-gmail-personal.org"))))
 
 (ert-deftest rjd/smoke-org-agenda-file-commands-do-not-save ()
   "Removing an agenda file changes the session but saves nothing.
@@ -154,7 +168,8 @@ is told the change lasts only for this session, and where the
 permanent list is, by the last message once the command is over: Org's
 own message about the change comes after the list is stored, and would
 otherwise replace the note in the echo area.  Waiting on process output
-lets timers run, as returning to the command loop would."
+lets timers run, as returning to the command loop would; see
+`rjd/smoke-run-due-timers'."
   (require 'org)
   (let* ((custom-file (make-temp-file "rjd-smoke-custom" nil ".el"))
          (org-agenda-files org-agenda-files)
@@ -168,7 +183,7 @@ lets timers run, as returning to the command loop would."
         (progn
           (advice-add 'message :before record)
           (org-remove-file inbox)
-          (accept-process-output nil 0.1)
+          (rjd/smoke-run-due-timers)
           (advice-remove 'message record)
           (should-not (member inbox (org-agenda-files t)))
           (should (string-match-p "this session" (car messages)))
@@ -178,6 +193,43 @@ lets timers run, as returning to the command loop would."
                         (search-forward "org-agenda-files" nil t))))
       (advice-remove 'message record)
       (delete-file custom-file))))
+
+
+
+;;; Google Calendar
+
+(ert-deftest rjd/smoke-gcal-fetches-into-the-agenda-s-calendar-file ()
+  "The calendar is fetched into the file the agenda lists, and is on."
+  (require 'rjd-gcal)
+  (should (equal rjd/gcal-file "~/org-agenda/gcal-gmail-personal.org"))
+  (should rjd/gcal-mode))
+
+(ert-deftest rjd/smoke-gcal-file-is-not-in-the-ics-export ()
+  "The combined iCalendar export leaves the calendar file out.
+Its events came from Google, and would otherwise go back into another
+calendar through the exported .ics."
+  (require 'ox-icalendar)
+  (require 'rjd-gcal)
+  (let* ((dir (make-temp-file "rjd-smoke-ics" t))
+         (tasks (file-name-concat dir "tasks.org"))
+         (calendar (file-name-concat dir "calendar.org"))
+         (rjd/gcal-file calendar)
+         (org-agenda-files (list tasks calendar))
+         (org-icalendar-combined-agenda-file
+          (file-name-concat dir "agenda.ics")))
+    (unwind-protect
+        (progn
+          (write-region "* Meeting from org\n<2026-10-12 Mon 10:00>\n"
+                        nil tasks nil 'silent)
+          (write-region "* Meeting from Google\n<2026-10-13 Tue 10:00>\n"
+                        nil calendar nil 'silent)
+          (org-icalendar-combine-agenda-files)
+          (let ((ics (with-temp-buffer
+                       (insert-file-contents org-icalendar-combined-agenda-file)
+                       (buffer-string))))
+            (should (string-search "Meeting from org" ics))
+            (should-not (string-search "Meeting from Google" ics))))
+      (delete-directory dir t))))
 
 (ert-run-tests-batch-and-exit)
 
