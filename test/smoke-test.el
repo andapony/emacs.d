@@ -217,6 +217,72 @@ depends on the private.el in use, so the contexts are not checked."
   (should (fboundp 'mu4e-org-open)))
 
 
+;;; Capture
+
+(defun rjd/smoke-capture-cetos (from &optional mail-link)
+  "Capture an empty Cetos task as if from buffer FROM, and return it.
+The task is the text the capture adds to its target, as a string.
+With MAIL-LINK, an org link to a message, capture as if from that
+message in mu4e: the link is handed to `org-capture' already stored,
+as it would be by mu4e-org, which is how org-protocol and the like
+pass a link in too.  Without it, capture stores a link to FROM as
+usual.  The template is init.el's \"c\" one, aimed at a temporary
+file, and the capture is dated 2026-10-10 09:30."
+  (let* ((target (make-temp-file "rjd-smoke-cetos" nil ".org"))
+         (cetos (assoc "c" org-capture-templates))
+         (org-capture-templates
+          (list (append (seq-take cetos 3)
+                        (list (list 'file+headline target "Cetos"))
+                        (seq-drop cetos 4))))
+         (org-overriding-default-time
+          (encode-time '(0 30 9 10 10 2026 nil -1 nil)))
+         (org-capture-link-is-already-stored (and mail-link t))
+         (org-store-link-plist (and mail-link
+                                    (list :type "mu4e"
+                                          :annotation mail-link))))
+    (unwind-protect
+        (with-current-buffer from
+          (org-capture nil "c")
+          (org-capture-finalize)
+          (with-current-buffer (find-buffer-visiting target)
+            (prog1 (buffer-substring-no-properties (point-min) (point-max))
+              (set-buffer-modified-p nil)
+              (kill-buffer))))
+      (delete-file target))))
+
+(ert-deftest rjd/smoke-cetos-capture-keeps-its-key-and-target ()
+  "The Cetos template is still `c', filed under Cetos in projects.org."
+  (require 'org-capture)
+  (let ((cetos (assoc "c" org-capture-templates)))
+    (should (equal (seq-take cetos 4)
+                   '("c" "Cetos task" entry
+                     (file+headline "~/org-agenda/projects.org" "Cetos"))))
+    (should (equal (seq-drop cetos 5) '(:prepend nil :empty-lines 1)))))
+
+(ert-deftest rjd/smoke-cetos-capture-from-elsewhere-is-unchanged ()
+  "Captured from a file, a Cetos task is just the TODO and its date.
+The link org stores to the file is left out, as it always was."
+  (require 'org-capture)
+  (let ((file (make-temp-file "rjd-smoke-notes" nil ".txt" "Some notes\n")))
+    (unwind-protect
+        (let ((buffer (find-file-noselect file)))
+          (unwind-protect
+              (should (equal (rjd/smoke-capture-cetos buffer)
+                             "* Cetos\n\n** TODO \n  [2026-10-10 Sat 09:30]\n\n"))
+            (kill-buffer buffer)))
+      (delete-file file))))
+
+(ert-deftest rjd/smoke-cetos-capture-from-a-message-links-to-it ()
+  "Captured from a mu4e message, a Cetos task links back to it."
+  (require 'org-capture)
+  (with-temp-buffer
+    (should (equal (rjd/smoke-capture-cetos
+                    (current-buffer)
+                    "[[mu4e:msgid:rjd9@test.invalid][Budget for Q4]]")
+                   (concat "* Cetos\n\n** TODO \n  [2026-10-10 Sat 09:30]\n"
+                           "  [[mu4e:msgid:rjd9@test.invalid][Budget for Q4]]\n\n")))))
+
+
 ;;; Google Calendar
 
 (ert-deftest rjd/smoke-gcal-fetches-into-the-agenda-s-calendar-file ()
