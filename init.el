@@ -666,7 +666,12 @@ traversing corrupts its iteration."
              ((org-agenda-overriding-header "Waiting For")))
        (todo "TODO"
              ((org-agenda-files '("~/org-agenda/inbox.org"))
-              (org-agenda-overriding-header "Inbox (process me)"))))))))
+              (org-agenda-overriding-header "Inbox (process me)")))))))
+  :config
+  ;; Google Calendar in the agenda, from rjd-gcal in user-lisp/ -- see
+  ;; ";;; Calendar" below.  Turned on here, as the agenda loads, so the
+  ;; package is not loaded before anything needs it.
+  (rjd/gcal-mode 1))
 
 (use-package org-capture
   :defer t
@@ -782,12 +787,13 @@ into another calendar as copies -- see `rjd/gcal-file-p'."
 ;; that an upgrade can break silently -- the calendar just stops being
 ;; fetched.  If it disappears from the agenda, rjd-gcal.el's commentary
 ;; is the first place to look, and turning the mode off is the way round.
+;; The mode is turned on, through its autoload, from org-agenda's
+;; `:config' above, so neither it nor org-gcal loads until the agenda
+;; does: its fetches are for the agenda, which also fetches on opening.
 (use-package rjd-gcal
-  :demand t
+  :defer t
   :custom
-  (rjd/gcal-file "~/org-agenda/gcal-gmail-personal.org")
-  :config
-  (rjd/gcal-mode 1))
+  (rjd/gcal-file "~/org-agenda/gcal-gmail-personal.org"))
 
 ;;; Appearance
 

@@ -69,6 +69,9 @@
 (defvar rjd/smoke-load-error nil
   "The error that interrupted loading init.el, or nil.")
 
+(defvar rjd/smoke-features-after-init nil
+  "The features loaded once init.el had loaded, before any test ran.")
+
 (defun rjd/smoke-tolerated-warning-p (type)
   "Whether a warning of TYPE is the environment's, not the config's.
 Runtime state files such as recentf and history were written by the
@@ -133,7 +136,8 @@ with it.  Nil if git cannot say."
           (package-activate-all)
           (cl-letf (((symbol-function 'native-compile-async) #'ignore))
             (prepare-user-lisp))
-          (load user-init-file nil :nomessage))
+          (load user-init-file nil :nomessage)
+          (setq rjd/smoke-features-after-init (copy-sequence features)))
       (error (setq rjd/smoke-load-error err)))
   (setq kill-emacs-hook nil)
   (advice-remove 'display-warning #'rjd/smoke-record-warning))
@@ -368,10 +372,13 @@ The link org stores to the file is left out, as it always was."
 ;;; Google Calendar
 
 (ert-deftest rjd/smoke-gcal-fetches-into-the-agenda-s-calendar-file ()
-  "The calendar is fetched into the file the agenda lists, and is on."
-  (require 'rjd-gcal)
-  (should (equal rjd/gcal-file "~/org-agenda/gcal-gmail-personal.org"))
-  (should rjd/gcal-mode))
+  "The calendar is fetched into the file the agenda lists, and is on.
+It is turned on, through its autoload, once the agenda loads, and is
+not loaded before then."
+  (should-not (memq 'rjd-gcal rjd/smoke-features-after-init))
+  (require 'org-agenda)
+  (should rjd/gcal-mode)
+  (should (equal rjd/gcal-file "~/org-agenda/gcal-gmail-personal.org")))
 
 (ert-deftest rjd/smoke-gcal-file-is-not-in-the-ics-export ()
   "The combined iCalendar export leaves the calendar file out.
