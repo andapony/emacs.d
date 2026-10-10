@@ -1360,6 +1360,11 @@ the abbrevs in the major mode's abbrev table rather than the global one."
   ;; On entering mu4e, take the first context rather than asking: mail
   ;; is read in the declared accounts, Fastmail not being one of them.
   (mu4e-context-policy 'pick-first)
+  ;; A reply or forward takes the account the message belongs to, by the
+  ;; contexts' match functions, without asking.  New mail matches none,
+  ;; so mu4e asks which account to send as, rather than taking whichever
+  ;; context is current -- work mail must not go out from home.
+  (mu4e-compose-context-policy 'ask)
 
   ;; Folders outside every context.  Each context sets its account's.
   (mu4e-sent-folder   "/Sent")
@@ -1367,9 +1372,11 @@ the abbrevs in the major mode's abbrev table rather than the global one."
   (mu4e-trash-folder  "/Trash")
   (mu4e-refile-folder "/Archive")
 
-  ;; Sending goes out over SMTP; the server, port, stream type and the
-  ;; identity to send as are all set in private.el.  Without that file mu4e
-  ;; still reads mail, and sending is simply unconfigured.
+  ;; Outside every context sending goes out over SMTP; the server, port,
+  ;; stream type and the identity to send as are all set in private.el.
+  ;; Without that file mu4e still reads mail, and sending is simply
+  ;; unconfigured.  A context sends through msmtp instead, with
+  ;; `rjd-mail-send-it', and leaving it puts this back.
   (message-send-mail-function   'smtpmail-send-it)
 
   ;; Gmail keeps one message under many labels, and every synced folder

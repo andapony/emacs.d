@@ -23,6 +23,13 @@
 ;; through `docker exec'; in development they run directly and the
 ;; prefix is nil.  ADR 0001 has the reasons.
 ;;
+;; A context sends through msmtp, with `rjd-mail-send-it' as
+;; `message-send-mail-function' and the msmtp command, prefix and all,
+;; in `rjd-mail-sendmail-command'.  It is its own function rather than
+;; message's sendmail one, which puts "-oi" straight after the program
+;; and so would run "docker -oi exec ...".  The command is built on
+;; entering the context, so it uses the prefix in force then.
+;;
 ;; Gmail needs three things from mu4e beyond these contexts, set in
 ;; init.el: duplicates hidden, because a message in the Inbox is also in
 ;; All Mail; related messages left out of searches, or a thread's spam
@@ -38,6 +45,11 @@
 (declare-function make-mu4e-context "mu4e-context")
 (defvar mu4e-contexts)
 (defvar mu4e-get-mail-command)
+(declare-function message-narrow-to-headers "message")
+(declare-function message-fetch-field "message")
+(declare-function mail-strip-quoted-names "mail-utils")
+(defvar message-send-coding-system)
+(defvar mail-header-separator)
 
 
 ;;; Customization
@@ -87,7 +99,9 @@ and optionally:
               server it would only leave the Inbox, not reach Trash
   :mbsync-group
               the mbsync channel or group that syncs the account;
-              default :name"
+              default :name
+  :msmtp-account
+              the msmtp account that sends as it; default :name"
   :type '(repeat plist)
   :group 'rjd-mail)
 
@@ -112,6 +126,54 @@ accounts it is \"true\", mu4e's own default, so an update only indexes."
     "true"))
 
 
+;;; Sending
+
+(defvar rjd-mail-sendmail-command nil
+  "The command that sends a message as the current context's account.
+A list of strings, built through `rjd-mail-command'; nil outside every
+context.  `rjd-mail-send-it' adds the recipients.")
+
+(defun rjd-mail-send-it ()
+  "Send the prepared message buffer with `rjd-mail-sendmail-command'.
+A `message-send-mail-function', for the contexts.  The command reads
+the recipients from the message (msmtp's -t), or for a resend is given
+those of its Resent-To.
+
+Not `message-send-mail-with-sendmail', which puts \"-oi\" straight
+after `sendmail-program': with the program \"docker\" and the rest of
+the prefixed command in `message-sendmail-extra-arguments', that makes
+\"docker -oi exec ...\"."
+  (require 'message)
+  (unless rjd-mail-sendmail-command
+    (error "No account to send from: enter a mu4e context first"))
+  (let ((resent-to (save-restriction
+                     (message-narrow-to-headers)
+                     (message-fetch-field "resent-to"))))
+    ;; The separator line becomes the blank line that ends the headers.
+    (goto-char (point-min))
+    (re-search-forward (concat "^" (regexp-quote mail-header-separator) "\n"))
+    (replace-match "\n")
+    (run-hooks 'message-send-mail-hook)
+    (let* ((output (generate-new-buffer " *rjd-mail send*"))
+           (command (append rjd-mail-sendmail-command
+                            (if resent-to
+                                (split-string
+                                 (mail-strip-quoted-names resent-to)
+                                 "[ \t\n,]+" t)
+                              '("-t")))))
+      (unwind-protect
+          (let* ((default-directory "/")
+                 (coding-system-for-write message-send-coding-system)
+                 (status (apply #'call-process-region (point-min) (point-max)
+                                (car command) nil output nil (cdr command))))
+            (unless (eql status 0)
+              (error "Sending with %s failed (%s): %s"
+                     (string-join command " ") status
+                     (string-trim (with-current-buffer output
+                                    (buffer-string))))))
+        (kill-buffer output)))))
+
+
 ;;; Accounts
 
 (defun rjd-mail--mbsync-group (account)
@@ -124,10 +186,18 @@ accounts it is \"true\", mu4e's own default, so an update only indexes."
           (plist-get (or (plist-get account :folders) rjd-mail-gmail-folders)
                      folder)))
 
+(defun rjd-mail--msmtp-account (account)
+  "The msmtp account that sends ACCOUNT's mail."
+  (or (plist-get account :msmtp-account) (plist-get account :name)))
+
 (defun rjd-mail--settings (account)
   "The variables a context for ACCOUNT sets, as an alist."
   `((user-mail-address . ,(plist-get account :address))
     (user-full-name . ,(plist-get account :full-name))
+    (message-send-mail-function . rjd-mail-send-it)
+    (rjd-mail-sendmail-command
+     . ,(rjd-mail-command "msmtp" "-a" (rjd-mail--msmtp-account account)
+                          "--read-envelope-from"))
     (mu4e-sent-folder . ,(rjd-mail--folder account :sent))
     (mu4e-drafts-folder . ,(rjd-mail--folder account :drafts))
     (mu4e-trash-folder . ,(rjd-mail--folder account :trash))
@@ -182,12 +252,14 @@ ACCOUNTS defaults to `rjd-mail-accounts'.  With none, nil."
     (when accounts
       (require 'mu4e-context)
       (mapcar (lambda (account)
-                (let ((settings (rjd-mail--settings account)))
-                  (make-mu4e-context
-                   :name (plist-get account :name)
-                   :enter-func (lambda () (rjd-mail--enter settings))
-                   :leave-func #'rjd-mail--leave
-                   :match-func (rjd-mail--matcher account))))
+                (make-mu4e-context
+                 :name (plist-get account :name)
+                 ;; Worked out on entering, so that the sending command
+                 ;; is built behind the prefix in force then.
+                 :enter-func (lambda ()
+                               (rjd-mail--enter (rjd-mail--settings account)))
+                 :leave-func #'rjd-mail--leave
+                 :match-func (rjd-mail--matcher account)))
               accounts))))
 
 

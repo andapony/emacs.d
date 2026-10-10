@@ -76,6 +76,7 @@
   `(let ((user-mail-address "me@fastmail.example")
          (user-full-name "Me Myself")
          (message-send-mail-function 'smtpmail-send-it)
+         (rjd-mail-sendmail-command nil)
          (mu4e-sent-folder "/Sent")
          (mu4e-drafts-folder "/Drafts")
          (mu4e-trash-folder "/Trash")
@@ -189,6 +190,7 @@
       (should (equal user-mail-address "me@fastmail.example"))
       (should (equal user-full-name "Me Myself"))
       (should (eq message-send-mail-function 'smtpmail-send-it))
+      (should (equal rjd-mail-sendmail-command nil))
       (should (equal mu4e-sent-folder "/Sent"))
       (should (equal mu4e-drafts-folder "/Drafts"))
       (should (equal mu4e-trash-folder "/Trash"))
@@ -225,6 +227,103 @@
     (should-not (funcall matches '(:maildir "/other/INBOX")))
     (should-not (funcall matches '(:maildir "/gmail-test-other/inbox")))
     (should-not (funcall matches nil))))
+
+
+;;; Sending
+
+(ert-deftest rjd-mail-entering-gmail-sends-through-msmtp ()
+  (rjd-mail-tests--needs-mu4e)
+  (rjd-mail-tests--with-fastmail-defaults
+    (let ((rjd-mail-command-prefix nil))
+      (rjd-mail-tests--enter
+       (car (rjd-mail-contexts (list rjd-mail-tests--gmail))))
+      (should (eq message-send-mail-function #'rjd-mail-send-it))
+      (should (equal rjd-mail-sendmail-command
+                     '("msmtp" "-a" "gmail-test" "--read-envelope-from"))))))
+
+(ert-deftest rjd-mail-entering-sends-through-the-prefix ()
+  "The prefix in force on entering a context is the one msmtp runs behind.
+On the host it reaches the mail container; the -oi that message's own
+sendmail path puts before any extra argument must not land in it."
+  (rjd-mail-tests--needs-mu4e)
+  (rjd-mail-tests--with-fastmail-defaults
+    (let* ((rjd-mail-command-prefix nil)
+           (context (car (rjd-mail-contexts (list rjd-mail-tests--other)))))
+      (setq rjd-mail-command-prefix '("docker" "exec" "-i" "mail"))
+      (rjd-mail-tests--enter context)
+      (should (eq message-send-mail-function #'rjd-mail-send-it))
+      (should (equal rjd-mail-sendmail-command
+                     '("docker" "exec" "-i" "mail"
+                       "msmtp" "-a" "other" "--read-envelope-from"))))))
+
+(defun rjd-mail-tests--file-string (file)
+  "The contents of FILE."
+  (with-temp-buffer
+    (insert-file-contents file)
+    (buffer-string)))
+
+(defun rjd-mail-tests--send (command message)
+  "Send MESSAGE with `rjd-mail-send-it', COMMAND standing in for msmtp.
+MESSAGE is as message-mode prepares it, headers and body divided by
+`mail-header-separator'.  COMMAND is a shell script; it runs as
+\"sh -c COMMAND sh exec -i mail msmtp -a gmail-test ...\", so its
+\"$@\" is the prefixed command line msmtp would get.  Returns the
+result of sending."
+  (require 'sendmail)
+  (let ((rjd-mail-sendmail-command
+         (list "sh" "-c" command "sh"
+               "exec" "-i" "mail" "msmtp" "-a" "gmail-test"
+               "--read-envelope-from")))
+    (with-temp-buffer
+      (insert (format message mail-header-separator))
+      (rjd-mail-send-it))))
+
+(ert-deftest rjd-mail-send-it-pipes-the-message-to-the-command ()
+  "The message reaches the command, which reads its recipients from it.
+Nothing comes between the command's own words, as message's sendmail
+path would put -oi after the program -- `docker -oi exec ...'."
+  (let* ((dir (make-temp-file "rjd-mail-send" t))
+         (args (file-name-concat dir "args"))
+         (msg (file-name-concat dir "msg")))
+    (unwind-protect
+        (progn
+          (rjd-mail-tests--send
+           (format "printf '%%s\\n' \"$@\" > %s; cat > %s"
+                   (shell-quote-argument args) (shell-quote-argument msg))
+           "To: you@example.net\nSubject: Hi\n%s\nHello.\n")
+          (should (equal (rjd-mail-tests--file-string args)
+                         (concat "exec\n-i\nmail\nmsmtp\n-a\ngmail-test\n"
+                                 "--read-envelope-from\n-t\n")))
+          (should (equal (rjd-mail-tests--file-string msg)
+                         "To: you@example.net\nSubject: Hi\n\nHello.\n")))
+      (delete-directory dir t))))
+
+(ert-deftest rjd-mail-send-it-resends-to-resent-to ()
+  "A resend goes to the Resent-To addresses, not the original recipients."
+  (let ((args (make-temp-file "rjd-mail-send-args")))
+    (unwind-protect
+        (progn
+          (rjd-mail-tests--send
+           (format "printf '%%s\\n' \"$@\" > %s; cat > /dev/null"
+                   (shell-quote-argument args))
+           (concat "Resent-To: A <a@example.net>, b@example.net\n"
+                   "To: you@example.net\n%s\nHello.\n"))
+          (should (string-suffix-p "--read-envelope-from\na@example.net\nb@example.net\n"
+                                   (rjd-mail-tests--file-string args))))
+      (delete-file args))))
+
+(ert-deftest rjd-mail-send-it-reports-failure ()
+  "A command that fails makes sending fail, with what it said."
+  (let ((err (should-error
+              (rjd-mail-tests--send "cat > /dev/null; echo 'no token' >&2; exit 78"
+                                    "To: you@example.net\n%s\nHello.\n"))))
+    (should (string-match-p "no token" (error-message-string err)))))
+
+(ert-deftest rjd-mail-send-it-needs-a-context ()
+  "Outside every context there is no account to send as."
+  (let ((rjd-mail-sendmail-command nil))
+    (with-temp-buffer
+      (should-error (rjd-mail-send-it)))))
 
 
 ;;; Junk

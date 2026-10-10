@@ -92,7 +92,9 @@ accounts declared in `private.el` as `rjd-mail-accounts` into mu4e
 contexts.  Entering one sets the account's identity and folders and
 leaving it restores the global defaults -- the Fastmail identity and
 smtpmail -- so mail written outside mu4e is unchanged; with no account
-declared there are no contexts.  Every mail command (mbsync, msmtp,
+declared there are no contexts.  A context sends through msmtp with
+`rjd-mail-send-it`, not message's sendmail path, whose `-oi` would land
+inside the prefix (`docker -oi exec ...`).  Every mail command (mbsync, msmtp,
 oama) is built with `rjd-mail-command`, which puts
 `rjd-mail-command-prefix` in front: nil inside `claude-dev`, the mail
 container's `docker exec` on the host.  The package's symbols use the

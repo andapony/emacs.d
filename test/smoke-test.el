@@ -207,7 +207,8 @@ depends on the private.el in use, so the contexts are not checked."
   (should (eq mu4e-get-mail-command #'rjd-mail-get-mail-command))
   (should (eq mu4e-search-skip-duplicates t))
   (should (eq mu4e-search-include-related nil))
-  (should (eq mu4e-context-policy 'pick-first)))
+  (should (eq mu4e-context-policy 'pick-first))
+  (should (eq mu4e-compose-context-policy 'ask)))
 
 (ert-deftest rjd/smoke-mu4e-links-follow-before-mu4e-loads ()
   "An org mu4e: link is followed by `mu4e-org-open', autoloaded."
