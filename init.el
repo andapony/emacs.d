@@ -1392,15 +1392,6 @@ whatever another machine has synced in since."
   ;; unlike the two `setq's below it survives being set before load.
   (agent-shell-anthropic-default-session-mode-id "bypassPermissions")
 
-  ;; ── Transcript ───────────────────────────────────────────────────
-  ;; Show thinking without disclosing it by hand. Both are needed: a
-  ;; thought carries its own fold, but sits inside an activity group
-  ;; whose default ('latest) refolds it the moment the agent moves on.
-  ;; Tool bodies stay folded — expanding those too makes a long turn
-  ;; unreadable.
-  (agent-shell-thought-process-expand-by-default t)
-  (agent-shell-activity-group-expand-by-default t)
-
   ;; ── Submitting mid-turn ──────────────────────────────────────────
   ;; Upstream queues a mid-turn prompt until the turn ends and steers on
   ;; the override key. Swapped, so a correction reaches the running turn
