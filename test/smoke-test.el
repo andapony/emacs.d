@@ -154,7 +154,10 @@ is told the change lasts only for this session, and where the
 permanent list is, by the last message once the command is over: Org's
 own message about the change comes after the list is stored, and would
 otherwise replace the note in the echo area.  Waiting on process output
-lets timers run, as returning to the command loop would."
+lets timers run, as returning to the command loop would.  It waits
+more than once because a wait can end after running one other timer
+that has come due -- org-persist's, for one, once mu4e has loaded it --
+before the note's."
   (require 'org)
   (let* ((custom-file (make-temp-file "rjd-smoke-custom" nil ".el"))
          (org-agenda-files org-agenda-files)
@@ -168,7 +171,7 @@ lets timers run, as returning to the command loop would."
         (progn
           (advice-add 'message :before record)
           (org-remove-file inbox)
-          (accept-process-output nil 0.1)
+          (dotimes (_ 3) (accept-process-output nil 0.05))
           (advice-remove 'message record)
           (should-not (member inbox (org-agenda-files t)))
           (should (string-match-p "this session" (car messages)))
@@ -178,6 +181,25 @@ lets timers run, as returning to the command loop would."
                         (search-forward "org-agenda-files" nil t))))
       (advice-remove 'message record)
       (delete-file custom-file))))
+
+;;; Mail
+
+(ert-deftest rjd/smoke-mu4e-goes-through-rjd-mail ()
+  "Loading mu4e turns on `rjd-mail-mode', and mail is fetched through it.
+Skipped where mu4e is not installed.  Whether accounts are declared
+depends on the private.el in use, so the contexts are not checked."
+  (skip-unless (locate-library "mu4e"))
+  (require 'mu4e)
+  (should rjd-mail-mode)
+  (should (eq mu4e-get-mail-command #'rjd-mail-get-mail-command))
+  (should (eq mu4e-search-skip-duplicates t))
+  (should (eq mu4e-context-policy 'pick-first)))
+
+(ert-deftest rjd/smoke-mu4e-links-follow-before-mu4e-loads ()
+  "An org mu4e: link is followed by `mu4e-org-open', autoloaded."
+  (require 'org)
+  (should (eq (org-link-get-parameter "mu4e" :follow) #'mu4e-org-open))
+  (should (fboundp 'mu4e-org-open)))
 
 (ert-run-tests-batch-and-exit)
 

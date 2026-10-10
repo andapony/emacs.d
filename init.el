@@ -627,9 +627,13 @@ traversing corrupts its iteration."
   ;; tempo shortcuts again.
   (require 'org-tempo)
   (add-to-list 'org-structure-template-alist '("el" . "src emacs-lisp"))
-  ;; Register mu4e as a known link type so org-lint doesn't flag mu4e: links
-  ;; as unknown fuzzy locations when mu4e isn't loaded yet.
-  (org-link-set-parameters "mu4e")
+  ;; Register mu4e as a link type before mu4e has loaded, so that org-lint
+  ;; doesn't flag mu4e: links as unknown fuzzy locations, and following one
+  ;; loads mu4e (`mu4e-org-open' is autoloaded by mu4e's form) and opens the
+  ;; message.  Storing is left to mu4e-org, which registers it once mu4e
+  ;; loads: a :store function here would load mu4e on every
+  ;; `org-store-link'.
+  (org-link-set-parameters "mu4e" :follow #'mu4e-org-open)
   :bind (("C-c l" . org-store-link)
          ("C-c c" . org-capture)
          ("C-c a" . org-agenda)
@@ -1266,15 +1270,36 @@ the abbrevs in the major mode's abbrev table rather than the global one."
 
 ;;; Mail
 
+;; Mail accounts are declared in private.el as `rjd-mail-accounts', and
+;; `rjd-mail-mode' (user-lisp/rjd-mail.el) makes each one a mu4e context.
+;; Outside every context the settings below, and private.el's identity
+;; and smtpmail, are the Fastmail default; entering a context replaces
+;; them with the account's, and leaving puts them back.  With no account
+;; declared there are no contexts and an update only indexes.  If an
+;; upgrade breaks the contexts, turn `rjd-mail-mode' off.
+;;
+;; mu4e fetches mail itself, every `mu4e-update-interval' seconds while
+;; it runs, through `rjd-mail-get-mail-command': mbsync, behind
+;; `rjd-mail-command-prefix'.  There is no separate timer to overlap it.
+;; mu finds the maildir itself -- the root given to `mu init' -- so
+;; there is no maildir setting here.
 (use-package mu4e
   :defer t
+  ;; claude-dev builds mu, and with it mu4e, under ~/.local/mu; a host
+  ;; gets mu4e from its package manager.  A missing directory on
+  ;; `load-path' is harmless.
+  :load-path "~/.local/mu/share/emacs/site-lisp/mu4e"
+  ;; Following an org link to a message must work before mu4e has
+  ;; loaded; loading mu4e loads mu4e-org, which defines this.
+  :commands mu4e-org-open
   :bind ("C-c M" . mu4e)
   :custom
-  (mu4e-maildir "~/Mail")
-  (mu4e-get-mail-command "mbsync -a")
-  (mu4e-update-interval 300)           ; backup poll (systemd timer is primary)
+  (mu4e-update-interval 300)
+  ;; On entering mu4e, take the first context rather than asking: mail
+  ;; is read in the declared accounts, Fastmail not being one of them.
+  (mu4e-context-policy 'pick-first)
 
-  ;; Folder mapping — verify the names with `ls ~/Mail/` after the first sync
+  ;; Folders outside every context.  Each context sets its account's.
   (mu4e-sent-folder   "/Sent")
   (mu4e-drafts-folder "/Drafts")
   (mu4e-trash-folder  "/Trash")
@@ -1285,9 +1310,17 @@ the abbrevs in the major mode's abbrev table rather than the global one."
   ;; still reads mail, and sending is simply unconfigured.
   (message-send-mail-function   'smtpmail-send-it)
 
+  ;; Gmail keeps one message under many labels, and every synced folder
+  ;; holds its own copy: a message in the Inbox is in All Mail too.  Hide
+  ;; the copies, so each message is listed once.  This is mu4e's default,
+  ;; set here because the Gmail accounts depend on it.
+  (mu4e-search-skip-duplicates t)
+
   ;; UI
   (mu4e-headers-date-format "%Y-%m-%d")
-  (mu4e-compose-dont-reply-to-self t)
+  ;; Replaces the obsolete `mu4e-compose-dont-reply-to-self': a reply to
+  ;; all leaves out my own addresses, as `mu init --my-address' lists them.
+  (message-dont-reply-to-names #'mu4e-personal-or-alternative-address-or-empty-p)
   (mu4e-headers-fields
    '((:human-date . 12)
      (:flags      .  6)
@@ -1304,11 +1337,19 @@ the abbrevs in the major mode's abbrev table rather than the global one."
   ;; Don't keep message buffers around
   (message-kill-buffer-on-exit t)
 
+  ;; Each account's Spam and Trash folders are left out by
+  ;; `rjd-mail-without-junk', which reads the declared accounts each time
+  ;; a query runs, so these are functions rather than strings.
   (mu4e-bookmarks
-   '((:name "Unread"      :query "flag:unread AND NOT flag:trashed AND NOT maildir:/Spam" :key ?u)
-     (:name "Today"       :query "date:today..now AND NOT flag:trashed AND NOT maildir:/Spam" :key ?t)
-     (:name "Last 7 days" :query "date:7d..now AND NOT flag:trashed AND NOT maildir:/Spam" :key ?w)
-     (:name "Flagged"     :query "flag:flagged"     :key ?f))))
+   `((:name "Unread" :key ?u
+      :query ,(lambda () (rjd-mail-without-junk "flag:unread AND NOT flag:trashed AND NOT maildir:/Spam")))
+     (:name "Today" :key ?t
+      :query ,(lambda () (rjd-mail-without-junk "date:today..now AND NOT flag:trashed AND NOT maildir:/Spam")))
+     (:name "Last 7 days" :key ?w
+      :query ,(lambda () (rjd-mail-without-junk "date:7d..now AND NOT flag:trashed AND NOT maildir:/Spam")))
+     (:name "Flagged" :key ?f :query "flag:flagged")))
+  :config
+  (rjd-mail-mode 1))
 
 ;;; Feeds
 
