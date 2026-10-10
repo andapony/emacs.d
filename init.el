@@ -517,6 +517,26 @@ deliberately does not match."
     "Enable visual-line mode for org buffers."
     (visual-line-mode 1))
 
+  (defun rjd/org-agenda-files-for-session (store list)
+    "Make LIST the agenda files for this session only, instead of saving it.
+Advice around `org-store-new-agenda-file-list', which STORE is.  Org's
+\\`C-c [' and \\`C-c ]', and the [R]emove answer to its prompt about a
+missing agenda file, all end there, and for a list it calls
+`customize-save-variable': the whole list, expanded to absolute paths,
+goes into custom.el.  Customize's user theme outranks the `use-package'
+theme that `:custom' sets through, so from then on the saved list wins
+over init.el's, silently -- a file added to init.el never reaches the
+agenda.  That is how custom.el once came to hold the list without the
+inbox.  Setting it instead keeps init.el the only source; the commands
+still work, until restart.
+
+When `org-agenda-files' is a string it names a file listing the agenda
+files, and STORE rewrites that file, which is the point of the
+arrangement, so STORE runs unchanged."
+    (if (stringp org-agenda-files)
+        (funcall store list)
+      (setq org-agenda-files list)))
+
   (defun rjd/org-plain-capture-preview ()
     "Turn off sub/superscript prettification in `org-capture\='s preview buffer.
 `org-capture-fill-template\=' expands the template in a *visible* buffer, so a
@@ -558,7 +578,9 @@ traversing corrupts its iteration."
   :custom
   ;; An org.el option despite the name, and read by `org-refile-targets'
   ;; below as much as by the agenda -- so it belongs here, not in the
-  ;; org-agenda block.
+  ;; org-agenda block.  This is the only place it is set: org's own
+  ;; commands for editing it are kept from saving into custom.el, which
+  ;; would override it -- see `rjd/org-agenda-files-for-session'.
   (org-agenda-files '("~/org-agenda/inbox.org"
                       "~/org-agenda/projects.org"
                       "~/org-agenda/areas.org"
@@ -594,6 +616,8 @@ traversing corrupts its iteration."
   :config
   (add-hook 'org-mode-hook #'rjd/org-mode-setup)
   (add-hook 'org-mode-hook #'rjd/org-plain-capture-preview)
+  (advice-add 'org-store-new-agenda-file-list
+              :around #'rjd/org-agenda-files-for-session)
   ;; Restores the "<el TAB" structure-template expansion that org moved out
   ;; of core after 9.1; entries in `org-structure-template-alist' become
   ;; tempo shortcuts again.

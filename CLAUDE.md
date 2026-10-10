@@ -46,6 +46,14 @@ without `dotfiles` has no `private.el` at all.
 in by the `setup` repo's `org-sync` role.  It is gitignored, so anything
 loaded from it must tolerate being absent.
 
+## Smoke test
+
+`test/smoke-test.el` loads the whole config in batch and checks what it
+actually set.  Run it from the checkout under test, a worktree included:
+`emacs --batch --init-directory=/Users/rob/projects/emacs.d -l
+test/smoke-test.el`.  Its commentary covers the batch-loading traps it
+handles and how to add an assertion.
+
 ## agent-shell
 
 Claude Code is driven from Emacs through `agent-shell`, which does not
