@@ -89,30 +89,42 @@ rather than to fix it under pressure.
 
 mu4e reads mail through `rjd-mail` (user-lisp), which turns the
 accounts declared in `private.el` as `rjd/mail-accounts` into mu4e
-contexts.  Entering one sets the account's identity and folders and
+contexts.  Entering one sets the account's identity and folders, and
 leaving it restores the global defaults -- the Fastmail identity and
 smtpmail -- so mail written outside mu4e is unchanged; with no account
-declared there are no contexts.  A context sends through msmtp with
-`rjd/mail-send-it`, not message's sendmail path, whose `-oi` would land
-inside the prefix (`docker -oi exec ...`).  A context stays entered
-after mu4e quits, so message buffers outside mu4e get the default
-identity and smtpmail back buffer-locally, from `message-mode-hook`.  Every mail command (mbsync, msmtp,
-oama) is built with `rjd/mail-command`, which puts
-`rjd/mail-command-prefix` in front: nil inside `claude-dev`, the mail
-container's `docker exec -i mail` on the host.  The default is chosen
-when the package loads, by `rjd/mail-default-command-prefix`: the
-container if Emacs is not itself in one and the `setup` playbook has
-written `~/.config/mail-container/` (the container's configuration,
-outside `~/projects`, so no agent can edit what runs beside the
-tokens); nil otherwise.  Declared accounts, and the calendar account,
-take effect only where `rjd/mail-available-p` says mail can run: where
-the prefix is set, or inside a container with `mbsync` on `exec-path`
-(`claude-dev` with the dev toolchain).  On leroy or bulldog Emacs
-starts as if none were declared; `rjd/mail-enabled` forces it either
-way.  `private.el` only declares data; the decision stays here, under
-test.  On the Mac, mu and mu4e come from Homebrew,
-and mu4e's form puts Homebrew's site-lisp on `load-path`.   `rjd/mail-mode` is opt-in, enabled from
-mu4e's form in `init.el`.  ERT tests: `test/rjd-mail-test.el`.
+declared there are no contexts.  A context stays entered after mu4e
+quits, so message buffers outside mu4e get the default identity and
+smtpmail back buffer-locally, from `message-mode-hook`.
+`rjd/mail-mode` also keeps each account's Spam and Trash out of every
+search that does not name them, through `mu4e-query-rewrite-function`.
+It is opt-in, enabled from mu4e's form in `init.el`, which also starts
+mu4e in the background at startup so mail syncs unopened.
+
+Sending is decided by the message's From, at send time:
+`rjd/mail-send-it` sends an active account's mail through that
+account's msmtp and hands any other to smtpmail, so a draft goes out
+as the account it was written as, whatever context is current.  It is
+its own function, not message's sendmail path, whose `-oi` would land
+inside the prefix (`docker -oi exec ...`).
+
+Every mail command (mbsync, msmtp, oama) is built with
+`rjd/mail-command`, which puts `rjd/mail-command-prefix` in front: nil
+inside `claude-dev`, the mail container's `docker exec -i mail` on the
+host.  The default is chosen when the package loads, by
+`rjd/mail-default-command-prefix`: the container if Emacs is not
+itself in one and the `setup` playbook has written
+`~/.config/mail-container/` (the container's configuration, outside
+`~/projects`, so no agent can edit what runs beside the tokens); nil
+otherwise.
+
+Declared accounts, and the calendar account, take effect only where
+`rjd/mail-available-p` says mail can run: where the prefix is set, or
+inside a container with `mbsync` on `exec-path` (`claude-dev` with
+the dev toolchain).  On leroy or bulldog Emacs starts as if none were
+declared; `rjd/mail-enabled` forces it either way.  `private.el` only
+declares data; the decision stays here, under test.  On the Mac, mu
+and mu4e come from Homebrew, and mu4e's form puts Homebrew's
+site-lisp on `load-path`.  ERT tests: `test/rjd-mail-test.el`.
 
 ## Calendar
 
@@ -126,7 +138,8 @@ on oauth2-auto's `oauth2-auto-access-token` -- an upgrade of org-gcal or
 oauth2-auto can break that silently, the calendar simply no longer
 updating.  **If the calendar disappears from the agenda, that advice is
 the first place to look**; `rjd-gcal.el`'s commentary names what it
-hooks, and `rjd/gcal-mode` is opt-in, enabled from `init.el`.  Nothing
+hooks, and `rjd/gcal-mode` is opt-in, enabled from org-agenda's form in
+`init.el`, so nothing loads before the agenda does.  Nothing
 calls org-gcal's sync, only its fetch.  The file is kept out of the
 combined `.ics` export (advice in `init.el`) and out of org-sync, whose
 file set is the `setup` repo's.  ERT tests: `test/rjd-gcal-test.el`.
