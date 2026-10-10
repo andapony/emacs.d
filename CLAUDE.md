@@ -94,7 +94,9 @@ leaving it restores the global defaults -- the Fastmail identity and
 smtpmail -- so mail written outside mu4e is unchanged; with no account
 declared there are no contexts.  A context sends through msmtp with
 `rjd-mail-send-it`, not message's sendmail path, whose `-oi` would land
-inside the prefix (`docker -oi exec ...`).  Every mail command (mbsync, msmtp,
+inside the prefix (`docker -oi exec ...`).  A context stays entered
+after mu4e quits, so message buffers outside mu4e get the default
+identity and smtpmail back buffer-locally, from `message-mode-hook`.  Every mail command (mbsync, msmtp,
 oama) is built with `rjd-mail-command`, which puts
 `rjd-mail-command-prefix` in front: nil inside `claude-dev`, the mail
 container's `docker exec` on the host.  The package's symbols use the

@@ -18,6 +18,12 @@
 ;; context `vars' are plain `set's.  So everything here goes through
 ;; the enter and leave functions, never `vars'.
 ;;
+;; A context stays entered while mu4e runs, and after it quits, so the
+;; globals are then the account's.  A message buffer that is not mu4e's
+;; -- C-x m, say -- therefore gets the default identity and
+;; sending function back as buffer-local values, from
+;; `message-mode-hook'.
+;;
 ;; The prefix exists because the tools that authenticate -- mbsync,
 ;; msmtp and oama -- run in a mail container on the host, reached
 ;; through `docker exec'; in development they run directly and the
@@ -231,6 +237,22 @@ An alist of (VARIABLE . VALUE), or nil outside every context.")
     (set (car cell) (cdr cell)))
   (setq rjd-mail--saved nil))
 
+(defconst rjd-mail--message-variables
+  '(user-mail-address user-full-name message-send-mail-function)
+  "The variables a context sets that decide who a message is from.")
+
+(defun rjd-mail--outside-mu4e ()
+  "Make a message buffer outside mu4e send as the global default.
+For `message-mode-hook'.  A mu4e context sets the identity and sending
+function globally, and keeps them after mu4e quits, so a plain
+\\[compose-mail] would otherwise go out as the last account mu4e used.
+Here they are put back, buffer-locally, to what the context replaced.
+message copies these locals into the buffer it sends from."
+  (when (and rjd-mail--saved (not (derived-mode-p 'mu4e-compose-mode)))
+    (dolist (var rjd-mail--message-variables)
+      (when-let* ((cell (assq var rjd-mail--saved)))
+        (set (make-local-variable var) (cdr cell))))))
+
 (defun rjd-mail--matcher (account)
   "A mu4e match function for ACCOUNT.
 A message matches when it is in the account's maildir, or addressed to
@@ -289,7 +311,8 @@ QUERY itself when no account is declared."
 ;;;###autoload
 (define-minor-mode rjd-mail-mode
   "Make each account in `rjd-mail-accounts' a mu4e context.
-Also fetch mail for them through `rjd-mail-get-mail-command'.  Turning
+Also fetch mail for them through `rjd-mail-get-mail-command', and keep
+message buffers outside mu4e on the global default identity.  Turning
 the mode off puts back the contexts and fetch command it replaced, and
 the global defaults if a context was entered."
   :global t
@@ -301,7 +324,9 @@ the global defaults if a context was entered."
                 (list (bound-and-true-p mu4e-contexts)
                       (bound-and-true-p mu4e-get-mail-command))))
         (setq mu4e-contexts (rjd-mail-contexts)
-              mu4e-get-mail-command #'rjd-mail-get-mail-command))
+              mu4e-get-mail-command #'rjd-mail-get-mail-command)
+        (add-hook 'message-mode-hook #'rjd-mail--outside-mu4e))
+    (remove-hook 'message-mode-hook #'rjd-mail--outside-mu4e)
     (when rjd-mail--before-mode
       (rjd-mail--leave)
       (setq mu4e-contexts (nth 0 rjd-mail--before-mode)

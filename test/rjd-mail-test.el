@@ -368,5 +368,66 @@ path would put -oi after the program -- `docker -oi exec ...'."
     (should (equal (funcall mu4e-get-mail-command) "true"))
     (rjd-mail-mode -1)))
 
+;;; Mail written outside mu4e
+
+(defmacro rjd-mail-tests--in-gmail-context (&rest body)
+  "Run BODY with `rjd-mail-mode' on and the Gmail context entered."
+  (declare (indent 0))
+  `(rjd-mail-tests--with-fastmail-defaults
+     (let ((rjd-mail-accounts (list rjd-mail-tests--gmail))
+           (rjd-mail-command-prefix nil)
+           (mu4e-contexts nil)
+           (mu4e-get-mail-command "true")
+           (rjd-mail-mode nil)
+           (rjd-mail--before-mode nil)
+           (message-mode-hook nil))
+       (rjd-mail-mode 1)
+       (unwind-protect
+           (progn
+             (rjd-mail-tests--enter (car mu4e-contexts))
+             ,@body)
+         (rjd-mail-mode -1)))))
+
+(ert-deftest rjd-mail-message-mode-outside-mu4e-keeps-fastmail ()
+  "Plain message-mode sends as the Fastmail default, inside a context too.
+mu4e's context is global and outlives quitting mu4e, so without this
+\\[compose-mail] would send as whichever account mu4e last used."
+  (rjd-mail-tests--needs-mu4e)
+  (rjd-mail-tests--in-gmail-context
+    (should (equal user-mail-address "someone@example.com"))
+    (with-temp-buffer
+      (message-mode)
+      (should (equal user-mail-address "me@fastmail.example"))
+      (should (equal user-full-name "Me Myself"))
+      (should (eq message-send-mail-function 'smtpmail-send-it)))))
+
+(ert-deftest rjd-mail-mu4e-compose-uses-the-context ()
+  "mu4e's own compose buffers send as the context's account."
+  (rjd-mail-tests--needs-mu4e)
+  (require 'mu4e-compose)
+  (rjd-mail-tests--in-gmail-context
+    (with-temp-buffer
+      (mu4e-compose-mode)
+      (should (equal user-mail-address "someone@example.com"))
+      (should (eq message-send-mail-function #'rjd-mail-send-it)))))
+
+(ert-deftest rjd-mail-message-mode-outside-every-context ()
+  "With no context entered message-mode is left alone."
+  (rjd-mail-tests--needs-mu4e)
+  (rjd-mail-tests--with-fastmail-defaults
+    (let ((rjd-mail-accounts (list rjd-mail-tests--gmail))
+          (mu4e-contexts nil)
+          (rjd-mail-mode nil)
+          (rjd-mail--before-mode nil)
+          (message-mode-hook nil))
+      (rjd-mail-mode 1)
+      (unwind-protect
+          (with-temp-buffer
+            (message-mode)
+            (should-not (local-variable-p 'user-mail-address))
+            (should (eq message-send-mail-function 'smtpmail-send-it)))
+        (rjd-mail-mode -1)))))
+
+
 (provide 'rjd-mail-test)
 ;;; rjd-mail-test.el ends here
