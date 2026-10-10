@@ -7,11 +7,6 @@ status: accepted
 Spec: [#2](https://github.com/andapony/emacs.d/issues/2), including its
 addendum comment on the mu version.
 
-ADRs in this repository are numbered `NNNN-slug.md` in `docs/adr/`,
-starting here at `0001`.  Each carries a `status` (`proposed`,
-`accepted`, `deprecated`, or `superseded by ADR-NNNN`) and the sections
-below.
-
 
 ## Context
 
@@ -38,7 +33,9 @@ container can reach them.
 
 **Sync stack: mbsync + mu4e.**  This is the stack the config already
 has.  Sync covers only INBOX, All Mail, Sent Mail, Drafts, Trash and
-Spam; labels stay a web-UI concern.  mu4e runs mbsync itself on its
+Spam; label folders are not synced, and labels stay a web-UI concern.
+Archiving in mu4e moves a message out of INBOX, so it leaves Gmail's
+Inbox and stays in All Mail, as archiving does on the web.  mu4e runs mbsync itself on its
 update interval, so there is no separate timer to overlap with it, and
 mail syncs only while Emacs runs.  Sending goes through msmtp; smtpmail
 stays only for the Fastmail default identity.
@@ -79,6 +76,17 @@ FileVault and macOS file permissions.  The account's token requests the
 full-mail scope plus `calendar.readonly`, so calendar access is
 read-only by scope, not by convention.
 
+Getting the token takes a one-time login in a browser, after which no
+password is typed.  oama's redirect listener binds only loopback inside
+its container, and Google accepts only loopback redirect URIs for a
+desktop client, so the browser on the Mac cannot deliver the redirect
+itself.  The login is done by hand: the consent URL is fetched from
+oama inside the container and opened in the Mac browser, and the
+redirect URL the browser then fails to load is copied back and
+delivered to oama from inside the container (#5 has the procedure).  A
+published port would not reach the listener on its own; it would need
+a relay inside the container from the published port to loopback.
+
 **Calendar: org-gcal, fetch only.**  org-gcal fetches events into a
 dedicated per-account org file under the agenda directory, on agenda
 open and on a timer; its sync is never invoked, so nothing done in org
@@ -109,8 +117,9 @@ it is allowlisted.
 
 ## Consequences
 
-**Fragile hooks.**  Each of these fails quietly, so each is named in the
-code's commentary where it applies:
+**Fragile hooks.**  Each of these fails quietly, so the code that
+depends on one, once written, must name it in its commentary where it
+applies:
 
 - The calendar depends on oauth2-auto's access-token function returning
   an aio promise, which the `rjd-` advice imitates.  An oauth2-auto or

@@ -22,6 +22,13 @@ This is a single-context repo:
 └── user-lisp/
 ```
 
+## ADR format
+
+ADRs are numbered `NNNN-slug.md` in `docs/adr/`, starting at `0001`.
+Each carries a `status` in its front matter (`proposed`, `accepted`,
+`deprecated`, or `superseded by ADR-NNNN`) and the sections Context,
+Decision, Consequences, and Alternatives and fallbacks.
+
 ## Use the glossary's vocabulary
 
 When your output names a domain concept (in an issue title, a refactor proposal, a hypothesis, a test name), use the term as defined in `GLOSSARY.md`. Don't drift to synonyms the glossary explicitly avoids.
