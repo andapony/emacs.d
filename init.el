@@ -528,14 +528,18 @@ theme that `:custom' sets through, so from then on the saved list wins
 over init.el's, silently -- a file added to init.el never reaches the
 agenda.  That is how custom.el once came to hold the list without the
 inbox.  Setting it instead keeps init.el the only source; the commands
-still work, until restart.
+still work, until restart, and say so, since nothing else would.  The
+note waits for a timer because the commands send their own message
+after storing the list, which would replace it in the echo area.
 
 When `org-agenda-files' is a string it names a file listing the agenda
 files, and STORE rewrites that file, which is the point of the
 arrangement, so STORE runs unchanged."
     (if (stringp org-agenda-files)
         (funcall store list)
-      (setq org-agenda-files list)))
+      (setq org-agenda-files list)
+      (run-at-time 0 nil #'message "Agenda files changed for this session \
+only; the permanent list is init.el's org `:custom'")))
 
   (defun rjd/org-plain-capture-preview ()
     "Turn off sub/superscript prettification in `org-capture\='s preview buffer.

@@ -6,8 +6,11 @@
 ;; session would, then checks what the loaded configuration actually
 ;; says.  Run it from the checkout under test, which may be a worktree:
 ;;
-;;   emacs --batch --init-directory=/Users/rob/projects/emacs.d \
-;;         -l test/smoke-test.el
+;;   emacs --batch --init-directory=MAIN -l test/smoke-test.el
+;;
+;; where MAIN is the main checkout: the one Emacs runs from, whose
+;; elpa/ holds the installed packages.  Run without it, the error
+;; names the main checkout of the repository this file is in.
 ;;
 ;; It exits non-zero if any test fails.
 ;;
@@ -82,9 +85,24 @@ Warnings that `rjd/smoke-tolerated-warning-p' accepts are left out."
   (unless (rjd/smoke-tolerated-warning-p type)
     (push (list type message) rjd/smoke-load-warnings)))
 
+(defun rjd/smoke-main-checkout ()
+  "The main checkout of the repository holding `rjd/smoke-checkout'.
+That is the parent of git's common directory, which a worktree shares
+with it.  Nil if git cannot say."
+  (let ((default-directory rjd/smoke-checkout))
+    (with-temp-buffer
+      (when (eql 0 (ignore-errors
+                     (call-process "git" nil t nil "rev-parse"
+                                   "--path-format=absolute"
+                                   "--git-common-dir")))
+        (file-name-directory
+         (directory-file-name (string-trim (buffer-string))))))))
+
 (unless (file-directory-p (file-name-concat user-emacs-directory "elpa"))
-  (error "No elpa/ in %s: run with --init-directory=/Users/rob/projects/emacs.d"
-         user-emacs-directory))
+  (error "No elpa/ in %s: run with --init-directory=%s"
+         user-emacs-directory
+         (or (rjd/smoke-main-checkout)
+             "the main checkout, the one Emacs runs from")))
 
 (setq native-comp-jit-compilation nil)
 (setq user-lisp-directory (file-name-concat rjd/smoke-checkout "user-lisp/"))
@@ -131,18 +149,34 @@ A value saved in custom.el would win over init.el's `:custom'."
 (ert-deftest rjd/smoke-org-agenda-file-commands-do-not-save ()
   "Removing an agenda file changes the session but saves nothing.
 Org's `C-c ]', and the [R]emove answer to its prompt about a missing
-agenda file, otherwise save the whole list into custom.el."
+agenda file, otherwise save the whole list into custom.el.  The user
+is told the change lasts only for this session, and where the
+permanent list is, by the last message once the command is over: Org's
+own message about the change comes after the list is stored, and would
+otherwise replace the note in the echo area.  Waiting on process output
+lets timers run, as returning to the command loop would."
   (require 'org)
   (let* ((custom-file (make-temp-file "rjd-smoke-custom" nil ".el"))
          (org-agenda-files org-agenda-files)
-         (inbox (expand-file-name "~/org-agenda/inbox.org")))
+         (inbox (expand-file-name "~/org-agenda/inbox.org"))
+         (messages nil)
+         (record (lambda (format-string &rest args)
+                   (when format-string
+                     (push (apply #'format-message format-string args)
+                           messages)))))
     (unwind-protect
         (progn
+          (advice-add 'message :before record)
           (org-remove-file inbox)
+          (accept-process-output nil 0.1)
+          (advice-remove 'message record)
           (should-not (member inbox (org-agenda-files t)))
+          (should (string-match-p "this session" (car messages)))
+          (should (string-match-p "init\\.el" (car messages)))
           (should-not (with-temp-buffer
                         (insert-file-contents custom-file)
                         (search-forward "org-agenda-files" nil t))))
+      (advice-remove 'message record)
       (delete-file custom-file))))
 
 (ert-run-tests-batch-and-exit)
