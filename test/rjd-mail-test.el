@@ -241,6 +241,56 @@
     (should (equal (rjd-mail-without-junk "flag:unread") "flag:unread"))))
 
 
+;;; Flags on unread mail
+
+(defun rjd-mail-tests--maildir-files (root)
+  "The files under ROOT, relative to it, sorted."
+  (sort (mapcar (lambda (file) (file-relative-name file root))
+                (directory-files-recursively root ""))
+        #'string<))
+
+(ert-deftest rjd-mail-file-flagged-new-moves-flagged-unread-to-cur ()
+  "An unread starred message must reach cur/, or mu drops its star.
+mbsync files unread mail in new/ with its flags in the name; mu reads
+anything in new/ as New alone, so marking it read writes `:2,S' and the
+next sync removes Gmail's Starred label (#18)."
+  (let* ((root (make-temp-file "rjd-mail-test-" t))
+         (rjd-mail-accounts (list rjd-mail-tests--gmail)))
+    (unwind-protect
+        (progn
+          (dolist (dir '("inbox" "all"))
+            (dolist (sub '("cur" "new" "tmp"))
+              (make-directory (format "%s/gmail-test/%s/%s" root dir sub) t)))
+          (dolist (file '("inbox/new/1.h,U=1:2,F"    ; starred, unread
+                          "all/new/1.h,U=7:2,FR"     ; and replied to
+                          "inbox/new/2.h,U=2:2,"     ; unread, nothing else
+                          "inbox/new/3.h"            ; no info at all
+                          "inbox/cur/4.h,U=4:2,FS")) ; read already
+            (write-region "" nil (format "%s/gmail-test/%s" root file)))
+          (rjd-mail-file-flagged-new root)
+          (should (equal (rjd-mail-tests--maildir-files root)
+                         '("gmail-test/all/cur/1.h,U=7:2,FR"
+                           "gmail-test/inbox/cur/1.h,U=1:2,F"
+                           "gmail-test/inbox/cur/4.h,U=4:2,FS"
+                           "gmail-test/inbox/new/2.h,U=2:2,"
+                           "gmail-test/inbox/new/3.h"))))
+      (delete-directory root t))))
+
+(ert-deftest rjd-mail-file-flagged-new-leaves-other-maildirs ()
+  "Only the declared accounts' mail is touched."
+  (let* ((root (make-temp-file "rjd-mail-test-" t))
+         (rjd-mail-accounts (list rjd-mail-tests--gmail)))
+    (unwind-protect
+        (progn
+          (make-directory (format "%s/fastmail/INBOX/new" root) t)
+          (make-directory (format "%s/fastmail/INBOX/cur" root) t)
+          (write-region "" nil (format "%s/fastmail/INBOX/new/1.h:2,F" root))
+          (rjd-mail-file-flagged-new root)
+          (should (equal (rjd-mail-tests--maildir-files root)
+                         '("fastmail/INBOX/new/1.h:2,F"))))
+      (delete-directory root t))))
+
+
 ;;; The mode
 
 (ert-deftest rjd-mail-mode-installs-and-restores ()
@@ -256,6 +306,42 @@
     (rjd-mail-mode -1)
     (should (equal mu4e-contexts nil))
     (should (equal mu4e-get-mail-command "true"))))
+
+(ert-deftest rjd-mail-mode-files-flagged-new-before-indexing ()
+  "Every index -- after a fetch, or on its own -- sees the flags (#18)."
+  (rjd-mail-tests--needs-mu4e)
+  (require 'mu4e-update)
+  (let* ((root (make-temp-file "rjd-mail-test-" t))
+         (rjd-mail-accounts (list rjd-mail-tests--gmail))
+         (mu4e-contexts nil)
+         (mu4e-get-mail-command "true")
+         (rjd-mail-mode nil)
+         (rjd-mail--before-mode nil)
+         indexed-files)
+    (unwind-protect
+        (progn
+          (make-directory (format "%s/gmail-test/inbox/new" root) t)
+          (make-directory (format "%s/gmail-test/inbox/cur" root) t)
+          (write-region "" nil (format "%s/gmail-test/inbox/new/1.h,U=1:2,F"
+                                       root))
+          (cl-letf (((symbol-function 'mu4e-root-maildir) (lambda () root))
+                    ((symbol-function 'mu4e--server-index)
+                     (lambda (&rest _)
+                       (setq indexed-files
+                             (rjd-mail-tests--maildir-files root)))))
+            (rjd-mail-mode 1)
+            (mu4e-update-index)
+            (rjd-mail-mode -1)
+            (should (equal indexed-files
+                           '("gmail-test/inbox/cur/1.h,U=1:2,F")))
+            ;; Off, the mode leaves indexing alone.
+            (rename-file (format "%s/gmail-test/inbox/cur/1.h,U=1:2,F" root)
+                         (format "%s/gmail-test/inbox/new/" root))
+            (mu4e-update-index)
+            (should (equal indexed-files
+                           '("gmail-test/inbox/new/1.h,U=1:2,F")))))
+      (rjd-mail-mode -1)
+      (delete-directory root t))))
 
 (ert-deftest rjd-mail-mode-without-accounts ()
   "No accounts: the mode turns on cleanly and adds no contexts."

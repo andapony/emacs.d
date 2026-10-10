@@ -38,6 +38,7 @@
 (declare-function make-mu4e-context "mu4e-context")
 (defvar mu4e-contexts)
 (defvar mu4e-get-mail-command)
+(declare-function mu4e-root-maildir "mu4e-server")
 
 
 ;;; Customization
@@ -209,6 +210,46 @@ QUERY itself when no account is declared."
     query))
 
 
+;;; Flags on unread mail
+
+(defun rjd-mail-file-flagged-new (root)
+  "Move the accounts' unread messages that carry flags from new/ to cur/.
+ROOT is mu's root maildir.  mbsync files a message it has not seen
+read in new/, with the rest of its flags still in the name: a starred
+one is `...:2,F'.  mu reads the name of a file in new/ as New and
+nothing else, so to it that message is not starred, and marking it read
+makes the file `...:2,S' -- whereupon the next sync takes the Starred
+label off it in Gmail (#18).  In cur/, mu reads the flags, and the file
+is still unread, since it has no S.  mbsync finds a message by the UID
+in its name, in new/ or cur/, so the move changes nothing on the server.
+
+Only messages with flags move, so the rest stay New.  Only the maildirs
+of `rjd-mail-accounts' are searched."
+  (dolist (account rjd-mail-accounts)
+    (let ((maildir (concat (directory-file-name root)
+                           (plist-get account :maildir))))
+      (when (file-directory-p maildir)
+        (dolist (new (directory-files-recursively
+                      maildir "\\`new\\'" t
+                      (lambda (dir)
+                        (not (member (file-name-nondirectory dir)
+                                     '("cur" "new" "tmp"))))))
+          (let ((cur (expand-file-name "../cur" new)))
+            (when (and (file-directory-p new) (file-directory-p cur))
+              (dolist (file (directory-files new t ":2,[[:alpha:]]+\\'"))
+                (when (file-regular-p file)
+                  (rename-file file (file-name-concat
+                                     cur (file-name-nondirectory file))))))))))))
+
+(defun rjd-mail--file-flagged-new-before-index (&rest _)
+  "Run `rjd-mail-file-flagged-new' on mu's root, as mu4e indexes.
+Advice on `mu4e-update-index', which mu4e calls once the fetch is done,
+so every index sees the flags of mail mbsync has just put in new/.
+Does nothing before mu4e has started and knows the root."
+  (when-let* ((root (ignore-errors (mu4e-root-maildir))))
+    (rjd-mail-file-flagged-new root)))
+
+
 ;;; Mode
 
 (defvar rjd-mail--before-mode nil
@@ -219,7 +260,10 @@ QUERY itself when no account is declared."
   "Make each account in `rjd-mail-accounts' a mu4e context.
 Also fetch mail for them through `rjd-mail-get-mail-command'.  Turning
 the mode off puts back the contexts and fetch command it replaced, and
-the global defaults if a context was entered."
+the global defaults if a context was entered.
+
+While on, each mu4e index first moves the accounts' unread mail that
+carries flags out of new/; see `rjd-mail-file-flagged-new'."
   :global t
   :group 'rjd-mail
   (if rjd-mail-mode
@@ -229,7 +273,11 @@ the global defaults if a context was entered."
                 (list (bound-and-true-p mu4e-contexts)
                       (bound-and-true-p mu4e-get-mail-command))))
         (setq mu4e-contexts (rjd-mail-contexts)
-              mu4e-get-mail-command #'rjd-mail-get-mail-command))
+              mu4e-get-mail-command #'rjd-mail-get-mail-command)
+        (advice-add 'mu4e-update-index :before
+                    #'rjd-mail--file-flagged-new-before-index))
+    (advice-remove 'mu4e-update-index
+                   #'rjd-mail--file-flagged-new-before-index)
     (when rjd-mail--before-mode
       (rjd-mail--leave)
       (setq mu4e-contexts (nth 0 rjd-mail--before-mode)
