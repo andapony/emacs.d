@@ -1315,6 +1315,12 @@ the abbrevs in the major mode's abbrev table rather than the global one."
   ;; the copies, so each message is listed once.  This is mu4e's default,
   ;; set here because the Gmail accounts depend on it.
   (mu4e-search-skip-duplicates t)
+  ;; And list only what a query matches.  With related messages included,
+  ;; mu4e's default, a search pulls in the rest of each thread from any
+  ;; folder, so a spam reply or a trashed message turned up in the Unread
+  ;; bookmark however its query excluded Spam and Trash.  `P r' in the
+  ;; headers view still toggles this per search.
+  (mu4e-search-include-related nil)
 
   ;; UI
   (mu4e-headers-date-format "%Y-%m-%d")
