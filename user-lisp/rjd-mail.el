@@ -101,6 +101,11 @@ presence is what says this machine has the container.")
   "Files whose presence says Emacs itself runs in a container.
 Docker's and podman's, as `rjd/container-git' in init.el checks.")
 
+(defun rjd/mail-inside-container-p ()
+  "Non-nil if Emacs itself runs in a container, as claude-dev's does.
+Told by any of `rjd/mail-container-marker-files' existing."
+  (seq-some #'file-exists-p rjd/mail-container-marker-files))
+
 (defun rjd/mail-default-command-prefix ()
   "Return the mail command prefix this machine needs.
 On a host with the mail container, the `docker exec -i' that reaches
@@ -108,7 +113,7 @@ it -- `-i', because msmtp reads the message on its standard input.
 nil inside a container, which is claude-dev in development, where the
 tools run directly; and nil on a machine without the mail container,
 where there is nothing to reach."
-  (and (not (seq-some #'file-exists-p rjd/mail-container-marker-files))
+  (and (not (rjd/mail-inside-container-p))
        (file-directory-p rjd/mail-container-directory)
        (list "docker" "exec" "-i" rjd/mail-container-name)))
 
@@ -151,7 +156,7 @@ Elsewhere `rjd/mail-accounts' and `rjd/gcal-account' are ignored, so
 Emacs starts as it would with none declared."
   (if (eq rjd/mail-enabled 'auto)
       (and (or rjd/mail-command-prefix
-               (and (seq-some #'file-exists-p rjd/mail-container-marker-files)
+               (and (rjd/mail-inside-container-p)
                     (executable-find rjd/mail-toolchain-program)))
            t)
     rjd/mail-enabled))
@@ -195,18 +200,40 @@ and optionally:
   :group 'rjd/mail)
 
 
-;;; Commands
-
-(defun rjd/mail-active-accounts ()
-  "The accounts that take effect here: `rjd/mail-accounts', or nil.
-Nil where `rjd/mail-available-p' says mail cannot run, so that a
-machine without the tools behaves as if none were declared."
-  (and (rjd/mail-available-p) rjd/mail-accounts))
+;;; Shell commands
 
 (defun rjd/mail-command (&rest argv)
   "Return ARGV with `rjd/mail-command-prefix' in front.
 ARGV is a command and its arguments, as strings; so is the result."
   (append rjd/mail-command-prefix argv))
+
+(defun rjd/mail-run-command (argv &optional start end)
+  "Run ARGV, a command and its arguments, and return what it printed.
+With START and END, the current buffer's text between them is the
+command's standard input.  If the command exits other than 0, signal
+an error that names it and its exit status, with what it wrote on
+standard error -- which for msmtp, mbsync and oama says what went
+wrong."
+  (let ((input (current-buffer))
+        (stderr (make-temp-file "rjd-mail-stderr")))
+    (unwind-protect
+        (with-temp-buffer
+          (let* ((output (current-buffer))
+                 (status
+                  (if start
+                      (with-current-buffer input
+                        (apply #'call-process-region start end (car argv)
+                               nil (list output stderr) nil (cdr argv)))
+                    (apply #'call-process (car argv) nil (list output stderr)
+                           nil (cdr argv)))))
+            (unless (eql status 0)
+              (error "`%s' failed (%s): %s"
+                     (string-join argv " ") status
+                     (with-temp-buffer
+                       (insert-file-contents stderr)
+                       (string-trim (buffer-string)))))
+            (buffer-string)))
+      (delete-file stderr))))
 
 ;;;###autoload
 (defun rjd/mail-get-mail-command ()
@@ -223,6 +250,12 @@ mu4e's own default, so an update only indexes."
 
 
 ;;; Accounts
+
+(defun rjd/mail-active-accounts ()
+  "The accounts that take effect here: `rjd/mail-accounts', or nil.
+Nil where `rjd/mail-available-p' says mail cannot run, so that a
+machine without the tools behaves as if none were declared."
+  (and (rjd/mail-available-p) rjd/mail-accounts))
 
 (defun rjd/mail--mbsync-group (account)
   "The mbsync channel or group that syncs ACCOUNT."
@@ -280,7 +313,7 @@ An alist of (VARIABLE . VALUE), or nil outside every context.")
   '(user-mail-address user-full-name message-send-mail-function)
   "The variables a context sets that decide who a message is from.")
 
-(defun rjd/mail--outside-mu4e ()
+(defun rjd/mail--restore-default-identity ()
   "Make a message buffer outside mu4e send as the global default.
 For `message-mode-hook'.  A mu4e context sets the identity and sending
 function globally, and keeps them after mu4e quits, so a plain
@@ -375,24 +408,15 @@ the prefixed command in `message-sendmail-extra-arguments', that makes
       (re-search-forward (concat "^" (regexp-quote mail-header-separator) "\n"))
       (replace-match "\n")
       (run-hooks 'message-send-mail-hook)
-      (let* ((output (generate-new-buffer " *rjd-mail send*"))
-             (command (append (rjd/mail--sendmail-command account)
-                              (if resent-to
-                                  (split-string
-                                   (mail-strip-quoted-names resent-to)
+      (let ((default-directory "/")
+            (coding-system-for-write message-send-coding-system))
+        (rjd/mail-run-command
+         (append (rjd/mail--sendmail-command account)
+                 (if resent-to
+                     (split-string (mail-strip-quoted-names resent-to)
                                    "[ \t\n,]+" t)
-                                '("-t")))))
-        (unwind-protect
-            (let* ((default-directory "/")
-                   (coding-system-for-write message-send-coding-system)
-                   (status (apply #'call-process-region (point-min) (point-max)
-                                  (car command) nil output nil (cdr command))))
-              (unless (eql status 0)
-                (error "Sending with %s failed (%s): %s"
-                       (string-join command " ") status
-                       (string-trim (with-current-buffer output
-                                      (buffer-string))))))
-          (kill-buffer output))))))
+                   '("-t")))
+         (point-min) (point-max))))))
 
 
 ;;; Queries
@@ -450,7 +474,7 @@ is left alone; see `rjd/mail--asks-for-junk-p'."
 
 ;;; Flags on unread mail
 
-(defun rjd/mail-file-flagged-new (root)
+(defun rjd/mail-move-flagged-new-to-cur (root)
   "Move the accounts' unread messages that carry flags from new/ to cur/.
 ROOT is mu's root maildir.  mbsync files a message it has not seen
 read in new/, with the rest of its flags still in the name: a starred
@@ -479,13 +503,13 @@ of `rjd/mail-active-accounts' are searched."
                   (rename-file file (file-name-concat
                                      cur (file-name-nondirectory file))))))))))))
 
-(defun rjd/mail--file-flagged-new-before-index (&rest _)
-  "Run `rjd/mail-file-flagged-new' on mu's root, as mu4e indexes.
+(defun rjd/mail--move-flagged-new-before-index (&rest _)
+  "Run `rjd/mail-move-flagged-new-to-cur' on mu's root, as mu4e indexes.
 Advice on `mu4e-update-index', which mu4e calls once the fetch is done,
 so every index sees the flags of mail mbsync has just put in new/.
 Does nothing before mu4e has started and knows the root."
   (when-let* ((root (ignore-errors (mu4e-root-maildir))))
-    (rjd/mail-file-flagged-new root)))
+    (rjd/mail-move-flagged-new-to-cur root)))
 
 
 ;;; Syncing from startup
@@ -523,7 +547,7 @@ contexts, fetch command and query rewriting it replaced, and the
 global defaults if a context was entered.
 
 While on, each mu4e index first moves the accounts' unread mail that
-carries flags out of new/; see `rjd/mail-file-flagged-new'."
+carries flags out of new/; see `rjd/mail-move-flagged-new-to-cur'."
   :global t
   :group 'rjd/mail
   (if rjd/mail-mode
@@ -538,12 +562,12 @@ carries flags out of new/; see `rjd/mail-file-flagged-new'."
         (setq mu4e-contexts (rjd/mail-contexts)
               mu4e-get-mail-command #'rjd/mail-get-mail-command
               mu4e-query-rewrite-function #'rjd/mail-search-query)
-        (add-hook 'message-mode-hook #'rjd/mail--outside-mu4e)
+        (add-hook 'message-mode-hook #'rjd/mail--restore-default-identity)
         (advice-add 'mu4e-update-index :before
-                    #'rjd/mail--file-flagged-new-before-index))
-    (remove-hook 'message-mode-hook #'rjd/mail--outside-mu4e)
+                    #'rjd/mail--move-flagged-new-before-index))
+    (remove-hook 'message-mode-hook #'rjd/mail--restore-default-identity)
     (advice-remove 'mu4e-update-index
-                   #'rjd/mail--file-flagged-new-before-index)
+                   #'rjd/mail--move-flagged-new-before-index)
     (when rjd/mail--before-mode
       (rjd/mail--leave)
       (setq mu4e-contexts (nth 0 rjd/mail--before-mode)

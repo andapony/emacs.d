@@ -60,12 +60,6 @@ and so does a machine where mail cannot run: see
   :type '(choice (const :tag "None" nil) string)
   :group 'rjd/gcal)
 
-(defun rjd/gcal-active-account ()
-  "The account whose calendar is fetched here: `rjd/gcal-account', or nil.
-Nil where `rjd/mail-available-p' says mail cannot run, since the token
-comes from the same tools, so such a machine fetches nothing."
-  (and (rjd/mail-available-p) rjd/gcal-account))
-
 (defcustom rjd/gcal-calendar-id nil
   "ID of the calendar to fetch, or nil for the account's primary calendar.
 The primary calendar's ID is the account's address."
@@ -94,27 +88,27 @@ The account is appended, and the whole is run through
   :group 'rjd/gcal)
 
 
+;;; The account
+
+(defun rjd/gcal-active-account ()
+  "The account whose calendar is fetched here: `rjd/gcal-account', or nil.
+Nil where `rjd/mail-available-p' says mail cannot run, since the token
+comes from the same tools, so such a machine fetches nothing."
+  (and (rjd/mail-available-p) rjd/gcal-account))
+
+
 ;;; The token
 
 (defun rjd/gcal--token ()
   "Return a fresh access token for `rjd/gcal-account'.
-Signal an error, with the command's own message, if it fails."
-  (let ((argv (apply #'rjd/mail-command
-                     (append rjd/gcal-token-command (list rjd/gcal-account))))
-        (stderr (make-temp-file "rjd-gcal-stderr")))
-    (unwind-protect
-        (with-temp-buffer
-          (let ((status (apply #'call-process (car argv) nil
-                               (list t stderr) nil (cdr argv)))
-                (output (string-trim (buffer-string))))
-            (if (and (eql status 0) (not (string-empty-p output)))
-                output
-              (error "rjd-gcal: `%s' failed (%s): %s"
-                     (string-join argv " ") status
-                     (with-temp-buffer
-                       (insert-file-contents stderr)
-                       (string-trim (buffer-string)))))))
-      (delete-file stderr))))
+Signal an error, with the command's own message, if it fails, and if
+it prints nothing."
+  (let* ((argv (apply #'rjd/mail-command
+                      (append rjd/gcal-token-command (list rjd/gcal-account))))
+         (token (string-trim (rjd/mail-run-command argv))))
+    (when (string-empty-p token)
+      (error "rjd-gcal: `%s' printed no token" (string-join argv " ")))
+    token))
 
 (defun rjd/gcal--access-token (access-token username provider)
   "Answer for the `org-gcal' PROVIDER with a token from oama.

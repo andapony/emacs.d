@@ -542,7 +542,7 @@ send with: no account, and no default saved to fall back on."
                 (directory-files-recursively root ""))
         #'string<))
 
-(ert-deftest rjd/mail-file-flagged-new-moves-flagged-unread-to-cur ()
+(ert-deftest rjd/mail-move-flagged-new-to-cur-moves-flagged-unread ()
   "An unread starred message must reach cur/, or mu drops its star.
 mbsync files unread mail in new/ with its flags in the name; mu reads
 anything in new/ as New alone, so marking it read writes `:2,S' and the
@@ -560,7 +560,7 @@ next sync removes Gmail's Starred label (#18)."
                           "inbox/new/3.h"            ; no info at all
                           "inbox/cur/4.h,U=4:2,FS")) ; read already
             (write-region "" nil (format "%s/gmail-test/%s" root file)))
-          (rjd/mail-file-flagged-new root)
+          (rjd/mail-move-flagged-new-to-cur root)
           (should (equal (rjd/mail-test-maildir-files root)
                          '("gmail-test/all/cur/1.h,U=7:2,FR"
                            "gmail-test/inbox/cur/1.h,U=1:2,F"
@@ -569,7 +569,7 @@ next sync removes Gmail's Starred label (#18)."
                            "gmail-test/inbox/new/3.h"))))
       (delete-directory root t))))
 
-(ert-deftest rjd/mail-file-flagged-new-leaves-other-maildirs ()
+(ert-deftest rjd/mail-move-flagged-new-to-cur-leaves-other-maildirs ()
   "Only the declared accounts' mail is touched."
   (let* ((root (make-temp-file "rjd-mail-test-" t))
          (rjd/mail-accounts (list rjd/mail-test-gmail)))
@@ -578,7 +578,7 @@ next sync removes Gmail's Starred label (#18)."
           (make-directory (format "%s/fastmail/INBOX/new" root) t)
           (make-directory (format "%s/fastmail/INBOX/cur" root) t)
           (write-region "" nil (format "%s/fastmail/INBOX/new/1.h:2,F" root))
-          (rjd/mail-file-flagged-new root)
+          (rjd/mail-move-flagged-new-to-cur root)
           (should (equal (rjd/mail-test-maildir-files root)
                          '("fastmail/INBOX/new/1.h:2,F"))))
       (delete-directory root t))))
@@ -630,7 +630,7 @@ in the background; its argument lists are pushed onto `starts'."
     (should (equal mu4e-get-mail-command "true"))
     (should (eq mu4e-query-rewrite-function 'identity))))
 
-(ert-deftest rjd/mail-mode-files-flagged-new-before-indexing ()
+(ert-deftest rjd/mail-mode-moves-flagged-new-before-indexing ()
   "Every index -- after a fetch, or on its own -- sees the flags (#18)."
   (rjd/mail-test-needs-mu4e)
   (require 'mu4e-update)
@@ -720,7 +720,7 @@ container -- decided by the machine, not forced."
       (rjd/mail-start-syncing)
       (should-not starts))))
 
-(ert-deftest rjd/mail-file-flagged-new-where-mail-cannot-run ()
+(ert-deftest rjd/mail-move-flagged-new-to-cur-where-mail-cannot-run ()
   "No account's maildir is touched."
   (rjd/mail-test-where-mail-cannot-run
     (let ((root (make-temp-file "rjd-mail-test-" t)))
@@ -730,7 +730,7 @@ container -- decided by the machine, not forced."
             (make-directory (format "%s/gmail-test/inbox/cur" root) t)
             (write-region "" nil (format "%s/gmail-test/inbox/new/1.h,U=1:2,F"
                                          root))
-            (rjd/mail-file-flagged-new root)
+            (rjd/mail-move-flagged-new-to-cur root)
             (should (equal (rjd/mail-test-maildir-files root)
                            '("gmail-test/inbox/new/1.h,U=1:2,F"))))
         (delete-directory root t)))))
