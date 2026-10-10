@@ -23,10 +23,11 @@
 ;; through `docker exec'; in development they run directly and the
 ;; prefix is nil.  ADR 0001 has the reasons.
 ;;
-;; Gmail needs two things from mu4e beyond these contexts, set in
+;; Gmail needs three things from mu4e beyond these contexts, set in
 ;; init.el: duplicates hidden, because a message in the Inbox is also in
-;; All Mail; and bookmarks that leave Spam and Trash out, for which
-;; `rjd-mail-without-junk' builds the query.
+;; All Mail; related messages left out of searches, or a thread's spam
+;; and trash come with it; and bookmarks that leave Spam and Trash out,
+;; for which `rjd-mail-without-junk' builds the query.
 ;;
 ;; Enable with `rjd-mail-mode', once mu4e has loaded.
 
