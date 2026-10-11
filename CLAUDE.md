@@ -107,6 +107,19 @@ as the account it was written as, whatever context is current.  It is
 its own function, not message's sendmail path, whose `-oi` would land
 inside the prefix (`docker -oi exec ...`).
 
+Replies to calendar invitations, which mu4e-icalendar builds with
+gnus-icalendar, carry only the replying attendee, by `:around` advice
+from `rjd/mail-mode` on gnus-icalendar's private
+`gnus-icalendar-event--build-reply`.  Emacs 31's builder copies every
+ATTENDEE into the REPLY, and Google ignores a reply with more than
+one.  The advice also calls the private
+`gnus-icalendar-event--find-attendee`, and relies on the builder
+reusing the invitation's attendee nodes; an Emacs upgrade can break
+either silently, the replies simply carrying every attendee again.
+**If an acceptance stops showing on the organiser's calendar, that
+advice is the first place to look**; `rjd-mail.el`'s commentary names
+what it hooks.  Remove it once Emacs fixes the builder upstream.
+
 Every mail command (mbsync, msmtp, oama) is built with
 `rjd/mail-command`, which puts `rjd/mail-command-prefix` in front: nil
 inside `claude-dev`, the mail container's `docker exec -i mail` on the
