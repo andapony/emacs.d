@@ -1438,10 +1438,13 @@ the abbrevs in the major mode's abbrev table rather than the global one."
   ;; Replaces the obsolete `mu4e-compose-dont-reply-to-self': a reply to
   ;; all leaves out my own addresses, as `mu init --my-address' lists them.
   (message-dont-reply-to-names #'mu4e-personal-or-alternative-address-or-empty-p)
+  ;; `:from-or-to' shows the sender, or "To " and the recipient when the
+  ;; sender is one of my addresses, as `mu init --my-address' lists them,
+  ;; so sent mail in a mixed search names who it went to.
   (mu4e-headers-fields
    '((:human-date . 12)
      (:flags      .  6)
-     (:from       . 22)
+     (:from-or-to . 22)
      (:subject    . nil)))
 
   ;; Plain rendering — no HTML fonts or colours
