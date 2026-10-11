@@ -33,7 +33,17 @@
 ;; The calendar is fetched only where mail can run, as
 ;; `rjd/mail-available-p' decides: the token comes from the same tools.
 ;; Elsewhere `rjd/gcal-active-account' is nil, so there is no timer and
-;; no fetch, though the calendar file is still made, empty.
+;; no fetch, though the calendar file is still made, with only its
+;; category line.
+;;
+;; The file's `#+CATEGORY:' line, `rjd/gcal-category', is what labels
+;; calendar entries in the agenda; it is added before every fetch to a
+;; file that lacks it.  org-gcal's fetch keeps it, since it never
+;; rewrites the file: it puts a new event at the end of the buffer, and
+;; updates or deletes an existing one only within that event's subtree,
+;; found by its ID -- so nothing above the first heading is touched.
+;; If the calendar's entries are labelled with the file name again
+;; after an org-gcal upgrade, check that this is still so.
 ;;
 ;; Enable with `rjd/gcal-mode'.  Turning it off is the way round a bad
 ;; upgrade.
@@ -71,6 +81,14 @@ The primary calendar's ID is the account's address."
 It belongs to the calendar: each fetch rewrites its entries, and
 nothing written there reaches Google.  List it in `org-agenda-files'."
   :type 'file
+  :group 'rjd/gcal)
+
+(defcustom rjd/gcal-category "calendar"
+  "The calendar file's category, which labels its entries in the agenda.
+Written as the file's `#+CATEGORY:' line.  Without it the category is
+the file name, wider than the agenda's category column, which pushes
+calendar entries out of line with the rest."
+  :type 'string
   :group 'rjd/gcal)
 
 (defcustom rjd/gcal-fetch-interval 900
@@ -158,15 +176,48 @@ fetch redoes it, so without this each fetch would set off the next.")
   (and rjd/gcal-file
        (string= (expand-file-name file) (expand-file-name rjd/gcal-file))))
 
+(defun rjd/gcal--ensure-category ()
+  "Put the `#+CATEGORY:' line at the top of the calendar file, if it lacks one.
+The file must exist.  A buffer visiting it is edited and saved, so that
+it does not go stale; otherwise the file is edited directly.  A file
+with a category of its own is left alone."
+  (let ((file (expand-file-name rjd/gcal-file)))
+    (if-let* ((buffer (find-buffer-visiting file)))
+        (with-current-buffer buffer
+          (when (rjd/gcal--insert-category)
+            (let ((save-silently t))
+              (save-buffer))))
+      (with-temp-buffer
+        (insert-file-contents file)
+        (when (rjd/gcal--insert-category)
+          (write-region nil nil file nil 'silent))))))
+
+(defun rjd/gcal--insert-category ()
+  "Insert the category line at the top of this buffer, unless it has one.
+Return non-nil if it was inserted."
+  (save-excursion
+    (save-restriction
+      (widen)
+      (goto-char (point-min))
+      (unless (let ((case-fold-search t))
+                (re-search-forward "^#\\+CATEGORY:" nil t))
+        (insert (format "#+CATEGORY: %s\n" rjd/gcal-category))
+        t))))
+
 (defun rjd/gcal--ensure-file ()
-  "Create `rjd/gcal-file', empty, if it is missing and its directory is not.
-The agenda asks what to do about a missing agenda file every time it
+  "Make sure `rjd/gcal-file' exists, with its `#+CATEGORY:' line.
+The file is created if it is missing and its directory is not.  The
+agenda asks what to do about a missing agenda file every time it
 opens, and the file is missing until a fetch has succeeded -- for
-good, on a machine whose fetch cannot."
+good, on a machine whose fetch cannot.  The category line is added to
+a file that lacks it, before org-gcal touches the file; org-gcal keeps
+it, see `rjd/gcal-category'."
   (let ((file (expand-file-name rjd/gcal-file)))
     (when (and (not (file-exists-p file))
                (file-directory-p (file-name-directory file)))
-      (write-region "" nil file nil 'silent))))
+      (write-region "" nil file nil 'silent))
+    (when (file-exists-p file)
+      (rjd/gcal--ensure-category))))
 
 (defun rjd/gcal--settled ()
   "Finish a fetch: save the calendar file, and redo every agenda.

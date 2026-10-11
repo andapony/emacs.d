@@ -1,4 +1,4 @@
-;;; rjd-gcal-test.el --- Tests for the calendar's oama token  -*- lexical-binding: t; -*-
+;;; rjd-gcal-test.el --- Tests for the calendar's token, fetching and file  -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 
@@ -6,7 +6,9 @@
 ;; on: the org-gcal provider's token comes from the mail command, every
 ;; other provider's from oauth2-auto as before.  No network, no oama,
 ;; no Docker: the mail command is replaced by `echo', and oauth2-auto's
-;; own answer by a stub.
+;; own answer by a stub.  Also when the calendar is fetched, and the
+;; category line the calendar file is given before any fetch -- the
+;; file always a temporary one.
 ;;
 ;; Run from the checkout under test, with MAIN the main checkout, whose
 ;; elpa/ holds oauth2-auto and aio:
@@ -105,7 +107,7 @@ temporary one.  `rjd/gcal-mode' is on for BODY."
 
 (ert-deftest rjd/gcal-where-mail-cannot-run-nothing-is-fetched ()
   "No timer, and neither the agenda nor the command fetches.
-The calendar file is still made, empty, so the agenda does not ask
+The calendar file is still made, with its category line, so the agenda does not ask
 about a missing file."
   (rjd/gcal-test-on-machine nil
     (should-not (rjd/gcal-test-timers))
@@ -120,6 +122,61 @@ about a missing file."
     (should (= (length (rjd/gcal-test-timers)) 1))
     (run-hooks 'org-agenda-mode-hook)
     (should (equal fetches '(fetched)))))
+
+
+;;; The calendar's category
+
+(defun rjd/gcal-test-file-contents ()
+  "The text of `rjd/gcal-file'."
+  (with-temp-buffer
+    (insert-file-contents rjd/gcal-file)
+    (buffer-string)))
+
+(ert-deftest rjd/gcal-new-file-starts-with-the-category ()
+  "Opening the agenda makes the calendar file with its category line.
+Its category labels each calendar entry in the agenda, instead of the
+file name, which is wider than the agenda's category column."
+  (rjd/gcal-test-on-machine nil
+    (run-hooks 'org-agenda-mode-hook)
+    (should (equal (rjd/gcal-test-file-contents) "#+CATEGORY: calendar\n"))))
+
+(ert-deftest rjd/gcal-existing-file-gains-the-category ()
+  "A calendar file made before there was a category gains one at the top.
+Its entries are left as they were."
+  (rjd/gcal-test-on-machine nil
+    (write-region "* Farmers Market\n<2026-10-11 Sun 09:00>\n"
+                  nil rjd/gcal-file nil 'silent)
+    (run-hooks 'org-agenda-mode-hook)
+    (should (equal (rjd/gcal-test-file-contents)
+                   (concat "#+CATEGORY: calendar\n"
+                           "* Farmers Market\n<2026-10-11 Sun 09:00>\n")))))
+
+(ert-deftest rjd/gcal-file-with-a-category-is-left-alone ()
+  "A calendar file that has a category already keeps it, unchanged."
+  (rjd/gcal-test-on-machine nil
+    (let ((text "#+category: gcal\n* Farmers Market\n"))
+      (write-region text nil rjd/gcal-file nil 'silent)
+      (run-hooks 'org-agenda-mode-hook)
+      (should (equal (rjd/gcal-test-file-contents) text)))))
+
+(ert-deftest rjd/gcal-visited-file-gains-the-category-in-its-buffer ()
+  "A calendar file open in a buffer gains the category there, and is saved.
+org-gcal writes events into that buffer, so a line added only on disk
+would be lost from it, and the buffer left out of date."
+  (rjd/gcal-test-on-machine nil
+    (write-region "* Farmers Market\n" nil rjd/gcal-file nil 'silent)
+    (let ((buffer (find-file-noselect rjd/gcal-file)))
+      (unwind-protect
+          (progn
+            (run-hooks 'org-agenda-mode-hook)
+            (should (equal (with-current-buffer buffer
+                             (buffer-substring-no-properties
+                              (point-min) (point-max)))
+                           "#+CATEGORY: calendar\n* Farmers Market\n"))
+            (should-not (buffer-modified-p buffer))
+            (should (equal (rjd/gcal-test-file-contents)
+                           "#+CATEGORY: calendar\n* Farmers Market\n")))
+        (kill-buffer buffer)))))
 
 (provide 'rjd-gcal-test)
 
