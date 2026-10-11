@@ -193,3 +193,36 @@ configuration.  This repository holds the code and this record.
   accepted.
 - **org-gcal two-way sync** (rejected).  Writing to a work calendar from
   org is out of scope; the read-only scope enforces it.
+
+
+## Addendum: Fastmail in the mail container
+
+Spec: [#22](https://github.com/andapony/emacs.d/issues/22).
+
+Fastmail was left as the global default identity, sending through
+smtpmail and never synced on the Mac.  It is now a second declared
+account, synced and sent by the mail container like Gmail: its mbsync
+syncs every folder (`Patterns *`), since Fastmail's folders are real
+folders rather than labels, into its own maildir beside Gmail's, and
+its msmtp sends from its context through `rjd/mail-send-it`.  Fastmail
+does not file mail sent over SMTP, so its context saves the copy
+(`:sent-messages-behavior sent`).  The global default is unchanged:
+mail written outside mu4e still goes out as Fastmail through smtpmail.
+
+**The container now holds a password.**  Fastmail offers no OAuth to
+third-party clients, so mbsync and msmtp log in with an app password
+over TLS.  That amends "oama is the only token store": the container's
+state volume holds the Fastmail app password too, GPG-encrypted with
+the same passphrase-less key as oama's tokens, and read by mbsync's
+`PassCmd` and msmtp's `passwordeval`.  It sits on the same terms as the
+tokens -- no agent container can reach it -- and is an app password of
+its own, so the Mac's access can be revoked without touching other
+machines.
+
+**Rejected: mbsync on the host, with the password in Keychain.**  Plain
+LOGIN needs no XOAUTH2 SASL module, so Fastmail alone could be synced
+by a Homebrew mbsync reading its password from the macOS Keychain, and
+the container would hold no password.  Rejected because it splits
+syncing across two places: two mbsyncs, two configurations, and two
+command prefixes for `rjd/mail-command` to choose between per account,
+where today one prefix reaches every mail tool.

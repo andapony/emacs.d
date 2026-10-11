@@ -1356,9 +1356,10 @@ the abbrevs in the major mode's abbrev table rather than the global one."
 
 ;; Mail accounts are declared in private.el as `rjd/mail-accounts', and
 ;; `rjd/mail-mode' (user-lisp/rjd-mail.el) makes each one a mu4e context.
-;; Outside every context the settings below, and private.el's identity
-;; and smtpmail, are the Fastmail default; entering a context replaces
-;; them with the account's, and leaving puts them back.  With no account
+;; Fastmail is one of them, beside Gmail, where mail can run.  Outside
+;; every context the settings below, and private.el's identity and
+;; smtpmail, are the Fastmail default; entering a context replaces them
+;; with the account's, and leaving puts them back.  With no account
 ;; declared there are no contexts and an update only indexes.  If an
 ;; upgrade breaks the contexts, turn `rjd/mail-mode' off.
 ;;
@@ -1391,7 +1392,8 @@ the abbrevs in the major mode's abbrev table rather than the global one."
   :custom
   (mu4e-update-interval 300)
   ;; On entering mu4e, take the first context rather than asking: mail
-  ;; is read in the declared accounts, Fastmail not being one of them.
+  ;; is read in the declared accounts, so the order private.el declares
+  ;; them in decides which comes first.
   (mu4e-context-policy 'pick-first)
   ;; A reply or forward takes the account the message belongs to, by the
   ;; contexts' match functions, without asking.  New mail matches none,
@@ -1400,6 +1402,11 @@ the abbrevs in the major mode's abbrev table rather than the global one."
   (mu4e-compose-context-policy 'ask)
 
   ;; Folders outside every context.  Each context sets its account's.
+  ;; These are Fastmail's as leroy and bulldog sync it, at the root of
+  ;; ~/Mail, where no account takes effect and so no context is ever
+  ;; entered.  Where accounts do take effect -- the Mac -- Fastmail is
+  ;; a context with its own maildir, entering mu4e enters the first
+  ;; context, and these name folders that do not exist there.
   (mu4e-sent-folder   "/Sent")
   (mu4e-drafts-folder "/Drafts")
   (mu4e-trash-folder  "/Trash")
@@ -1449,7 +1456,9 @@ the abbrevs in the major mode's abbrev table rather than the global one."
   ;; Each account's Spam and Trash folders are left out of these, as of
   ;; every search that does not name them, by `rjd/mail-mode', through
   ;; `mu4e-query-rewrite-function'.  These queries leave out only the
-  ;; Fastmail default's.
+  ;; Spam of Fastmail at the root of ~/Mail, for leroy and bulldog, where
+  ;; no account takes effect and so nothing is rewritten.  Elsewhere the
+  ;; clause matches no folder, and costs nothing.
   (mu4e-bookmarks
    '((:name "Unread" :key ?u
       :query "flag:unread AND NOT flag:trashed AND NOT maildir:/Spam")
