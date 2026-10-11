@@ -978,6 +978,7 @@ and leaving the context puts the default back."
             (should-not message-alternative-emails))
         (rjd/mail-mode -1)))))
 
+
 ;;; Replies
 
 (defvar mu4e--context-current)
@@ -1050,6 +1051,7 @@ addresses, so only the context can make the reply's From an alias."
                     (list rjd/mail-test-gmail fastmail)
                     "someone@fastmail.example")
                    "someone@fastmail.example"))))
+
 
 ;;; Invitation replies
 
