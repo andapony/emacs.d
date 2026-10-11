@@ -29,9 +29,9 @@
 ;;
 ;; A context stays entered while mu4e runs, and after it quits, so the
 ;; globals are then the account's.  A message buffer that is not mu4e's
-;; -- C-x m, say -- therefore gets the default identity and
-;; sending function back as buffer-local values, from
-;; `message-mode-hook'.
+;; -- C-x m, say -- therefore gets the default identity, sending
+;; function and `message-alternative-emails' back as buffer-local
+;; values, from `message-mode-hook'.
 ;;
 ;; The prefix exists because the tools that authenticate -- mbsync,
 ;; msmtp and oama -- run in a mail container on the host, reached
@@ -360,14 +360,18 @@ An alist of (VARIABLE . VALUE), or nil outside every context.")
   (setq rjd/mail--saved nil))
 
 (defconst rjd/mail--message-variables
-  '(user-mail-address user-full-name message-send-mail-function)
-  "The variables a context sets that decide who a message is from.")
+  '(user-mail-address user-full-name message-send-mail-function
+    message-alternative-emails)
+  "The variables a context sets that decide who a message is from.
+`message-alternative-emails' among them: with an account's aliases in
+it, a reply outside mu4e would be from an alias.")
 
 (defun rjd/mail--restore-default-identity ()
   "Make a message buffer outside mu4e send as the global default.
-For `message-mode-hook'.  A mu4e context sets the identity and sending
-function globally, and keeps them after mu4e quits, so a plain
-\\[compose-mail] would otherwise go out as the last account mu4e used.
+For `message-mode-hook'.  A mu4e context sets the identity, sending
+function and aliases globally, and keeps them after mu4e quits, so a
+plain \\[compose-mail] would otherwise go out as the last account mu4e
+used, and a reply from one of its aliases.
 Here they are put back, buffer-locally, to what the context replaced.
 message copies these locals into the buffer it sends from."
   (when (and rjd/mail--saved (not (derived-mode-p 'mu4e-compose-mode)))

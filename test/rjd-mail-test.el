@@ -39,6 +39,7 @@
 ;; Bound with `let' below, so they must be special even when mu4e and
 ;; message are not loaded.
 (defvar message-send-mail-function)
+(defvar message-alternative-emails)
 (defvar mu4e-sent-folder)
 (defvar mu4e-drafts-folder)
 (defvar mu4e-trash-folder)
@@ -949,11 +950,38 @@ mu4e's context is global and outlives quitting mu4e, so without this
             (should (eq message-send-mail-function 'smtpmail-send-it)))
         (rjd/mail-mode -1)))))
 
+(ert-deftest rjd/mail-aliases-stay-inside-mu4e ()
+  "An account's aliases answer for it in mu4e only.
+Entering a context with :addresses makes a reply from the alias the
+original was sent to.  A message buffer outside mu4e -- while the
+context is still entered, as after mu4e quits -- keeps the default,
+and leaving the context puts the default back."
+  (rjd/mail-test-needs-mu4e)
+  (rjd/mail-test-with-fastmail-defaults
+    (let ((rjd/mail-accounts (list rjd/mail-test-fastmail-aliases))
+          (rjd/mail-command-prefix nil)
+          (message-alternative-emails nil)
+          (mu4e-contexts nil)
+          (mu4e-get-mail-command "true")
+          (rjd/mail-mode nil)
+          (rjd/mail--before-mode nil)
+          (message-mode-hook nil))
+      (rjd/mail-mode 1)
+      (unwind-protect
+          (let ((context (car mu4e-contexts)))
+            (rjd/mail-test-enter context)
+            (should message-alternative-emails)
+            (with-temp-buffer
+              (message-mode)
+              (should-not message-alternative-emails))
+            (rjd/mail-test-leave context)
+            (should-not message-alternative-emails))
+        (rjd/mail-mode -1)))))
+
 ;;; Replies
 
 (defvar mu4e--context-current)
 (defvar mu4e-compose-context-policy)
-(defvar message-alternative-emails)
 (declare-function mu4e-compose-reply "mu4e-compose")
 
 (defun rjd/mail-test-reply-from (accounts to)
