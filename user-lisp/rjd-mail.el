@@ -53,6 +53,21 @@
 ;; one, which puts "-oi" straight after the program and so would run
 ;; "docker -oi exec ...".
 ;;
+;; An account's aliases -- Fastmail's plus, subdomain and catch-all
+;; addresses -- are one regexp, its :addresses, which `rjd/mail--address-p'
+;; matches against whole addresses.  Three things follow from it: mail
+;; to an alias, in To or Cc, chooses the account's context; a From of
+;; an alias sends through the account's msmtp; and the context sets
+;; `message-alternative-emails' to the same test, which message's reply
+;; -- mu4e's too -- uses to make the reply's From the address the
+;; original was sent to.  Like the address itself, the regexp lives in
+;; private.el.  mu needs the aliases as well, for `mu init
+;; --my-address', so that it counts mail to them as personal and
+;; reply-to-all leaves them out: give one `/.../' pattern per alias
+;; form, in syntax PCRE and Emacs regexps share -- no alternation or
+;; groups -- because mu matches it as PCRE and mu4e's
+;; `mu4e-personal-address-p' as an Emacs regexp.
+;;
 ;; Gmail needs three things from mu4e beyond these contexts:
 ;; duplicates hidden, because a message in the Inbox is also in All
 ;; Mail; related messages left out of searches, or a thread's spam and
@@ -218,7 +233,13 @@ and optionally:
               the mbsync channel or group that syncs the account;
               default :name
   :msmtp-account
-              the msmtp account that sends as it; default :name"
+              the msmtp account that sends as it; default :name
+  :addresses  a regexp matching, whole and regardless of case, every
+              other address the account receives and may send as --
+              plus, subdomain and catch-all aliases.  Mail to one opens
+              in the account's context, a From of one sends through
+              the account's msmtp, and a reply is from the alias the
+              original was sent to.  Default: none, only :address"
   :type '(repeat plist)
   :group 'rjd/mail)
 
@@ -295,8 +316,14 @@ machine without the tools behaves as if none were declared."
   (or (plist-get account :msmtp-account) (plist-get account :name)))
 
 (defun rjd/mail--settings (account)
-  "The variables a context for ACCOUNT sets, as an alist."
-  `((user-mail-address . ,(plist-get account :address))
+  "The variables a context for ACCOUNT sets, as an alist.
+With :addresses, `message-alternative-emails' too, so that a reply is
+from the alias the original was sent to; without it, that is left
+alone."
+  `(,@(when (plist-get account :addresses)
+        `((message-alternative-emails
+           . ,(lambda (address) (rjd/mail--address-p account address)))))
+    (user-mail-address . ,(plist-get account :address))
     (user-full-name . ,(plist-get account :full-name))
     (message-send-mail-function . rjd/mail-send-it)
     (mu4e-sent-folder . ,(rjd/mail--folder account :sent))
@@ -348,18 +375,26 @@ message copies these locals into the buffer it sends from."
       (when-let* ((cell (assq var rjd/mail--saved)))
         (set (make-local-variable var) (cdr cell))))))
 
+(defun rjd/mail--address-p (account address)
+  "Non-nil if ADDRESS, a bare address, is one of ACCOUNT's.
+That is its :address, or any whole address its :addresses regexp
+matches; either way regardless of case."
+  (and address
+       (or (string-equal-ignore-case address (plist-get account :address))
+           (when-let* ((regexp (plist-get account :addresses)))
+             (let ((case-fold-search t))
+               (string-match-p (concat "\\`\\(?:" regexp "\\)\\'") address))))))
+
 (defun rjd/mail--matcher (account)
   "A mu4e match function for ACCOUNT.
 A message matches when it is in the account's maildir, or addressed to
-the account in To or Cc."
-  (let ((prefix (concat (plist-get account :maildir) "/"))
-        (address (downcase (plist-get account :address))))
+one of the account's addresses in To or Cc; see `rjd/mail--address-p'."
+  (let ((prefix (concat (plist-get account :maildir) "/")))
     (lambda (msg)
       (when msg
         (or (string-prefix-p prefix (or (plist-get msg :maildir) ""))
             (seq-some (lambda (contact)
-                        (equal (downcase (or (plist-get contact :email) ""))
-                               address))
+                        (rjd/mail--address-p account (plist-get contact :email)))
                       (append (plist-get msg :to) (plist-get msg :cc))))))))
 
 (defun rjd/mail-contexts (&optional accounts)
@@ -383,12 +418,13 @@ ACCOUNTS defaults to `rjd/mail-active-accounts'.  With none, nil."
 ;;; Sending
 
 (defun rjd/mail--account-for-address (address)
-  "The active account whose address is ADDRESS, or nil.
-ADDRESS may carry a name and angle brackets, as a From header does."
+  "The active account ADDRESS is one of, or nil.
+ADDRESS may carry a name and angle brackets, as a From header does.
+One of an account's addresses is its :address or an alias its
+:addresses matches; see `rjd/mail--address-p'."
   (when address
-    (let ((address (downcase (string-trim (mail-strip-quoted-names address)))))
-      (seq-find (lambda (account)
-                  (equal (downcase (plist-get account :address)) address))
+    (let ((address (string-trim (mail-strip-quoted-names address))))
+      (seq-find (lambda (account) (rjd/mail--address-p account address))
                 (rjd/mail-active-accounts)))))
 
 (defun rjd/mail--sendmail-command (account)

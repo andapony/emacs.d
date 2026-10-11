@@ -100,6 +100,16 @@ search that does not name them, through `mu4e-query-rewrite-function`.
 It is opt-in, enabled from mu4e's form in `init.el`, which also starts
 mu4e in the background at startup so mail syncs unopened.
 
+An account's aliases (Fastmail's plus, subdomain and catch-all
+addresses) are one regexp, its optional `:addresses`, set in
+`private.el` and never here.  Mail to an alias picks the account's
+context, a From of one sends through its msmtp, and the context sets
+`message-alternative-emails` so a reply is from the alias written to.
+`mu init --my-address` needs the same addresses in `/.../` form, so mu
+counts that mail as personal: one `--my-address` per alias form,
+written in syntax PCRE and Emacs share (no `|` or groups), since mu
+reads it as PCRE and mu4e as an Emacs regexp.
+
 Sending is decided by the message's From, at send time:
 `rjd/mail-send-it` sends an active account's mail through that
 account's msmtp and hands any other to smtpmail, so a draft goes out

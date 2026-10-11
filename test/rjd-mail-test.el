@@ -88,6 +88,21 @@
 Fastmail's folders sit at the top level under their own names, and it
 does not file mail sent over SMTP, so mu4e must; the rest is default.")
 
+(defconst rjd/mail-test-fastmail-aliases
+  (append '(:addresses
+            "someone\\+[^@]*@fastmail\\.example\\|[^@]+@someone\\.fastmail\\.example\\|[^@]+@someone\\.example")
+          rjd/mail-test-fastmail)
+  "The Fastmail account with its aliases as one regexp, as private.el
+declares them: plus addresses, subdomain addresses and a catch-all on
+the account's own domain.")
+
+(defconst rjd/mail-test-alias-addresses
+  '("someone+shop@fastmail.example"
+    "shop@someone.fastmail.example"
+    "anything@someone.example")
+  "One address of each alias form `rjd/mail-test-fastmail-aliases' matches:
+plus, subdomain and catch-all.")
+
 (defmacro rjd/mail-test-with-fastmail-defaults (&rest body)
   "Run BODY with the global mail settings as the Fastmail default."
   (declare (indent 0))
@@ -411,6 +426,28 @@ Fastmail identity and smtpmail, which mail outside mu4e uses."
     (should-not (funcall matches '(:maildir "/gmail-test-other/inbox")))
     (should-not (funcall matches nil))))
 
+(ert-deftest rjd/mail-context-matches-mail-to-an-alias ()
+  "Mail to a plus, subdomain or catch-all address opens in the account's
+context, in To or Cc, whatever its case; a near miss does not."
+  (rjd/mail-test-needs-mu4e)
+  (let* ((contexts (rjd/mail-contexts
+                    (list rjd/mail-test-gmail rjd/mail-test-fastmail-aliases)))
+         (fastmail (rjd/mail-test-context "fastmail-test" contexts))
+         (matches (lambda (msg) (funcall (mu4e-context-match-func fastmail) msg))))
+    (dolist (address rjd/mail-test-alias-addresses)
+      (should (funcall matches `(:maildir "/elsewhere"
+                                 :to ((:email ,address)))))
+      (should (funcall matches `(:maildir "/elsewhere"
+                                 :to ((:email "you@example.net"))
+                                 :cc ((:email ,(upcase address)))))))
+    (should (funcall matches '(:maildir "/elsewhere"
+                               :to ((:email "someone@fastmail.example")))))
+    (dolist (address '("someone@fastmail.example.org"
+                       "anything@notsomeone.example"
+                       "someone@example.com"))
+      (should-not (funcall matches `(:maildir "/elsewhere"
+                                     :to ((:email ,address))))))))
+
 
 ;;; Sending
 
@@ -420,18 +457,20 @@ Fastmail identity and smtpmail, which mail outside mu4e uses."
     (insert-file-contents file)
     (buffer-string)))
 
-(defun rjd/mail-test-send (command message)
+(defun rjd/mail-test-send (command message &optional accounts)
   "Send MESSAGE with `rjd/mail-send-it', COMMAND standing in for msmtp.
 MESSAGE is as message-mode prepares it, headers and body divided by
 `mail-header-separator'.  COMMAND is a shell script, put in
 `rjd/mail-command-prefix' in front of the other words of a prefix: it
 runs as \"sh -c COMMAND sh exec -i mail msmtp -a ACCOUNT ...\", so its
-\"$@\" is the prefixed command line msmtp would get.  Both test accounts
-are declared.  Returns the result of sending."
+\"$@\" is the prefixed command line msmtp would get.  ACCOUNTS are
+declared; by default, `rjd/mail-test-gmail' and `rjd/mail-test-other'.
+Returns the result of sending."
   (require 'sendmail)
   (let ((rjd/mail-command-prefix (list "sh" "-c" command "sh"
                                        "exec" "-i" "mail"))
-        (rjd/mail-accounts (list rjd/mail-test-gmail rjd/mail-test-other)))
+        (rjd/mail-accounts (or accounts
+                               (list rjd/mail-test-gmail rjd/mail-test-other))))
     (with-temp-buffer
       (insert (format message mail-header-separator))
       (rjd/mail-send-it))))
@@ -514,6 +553,41 @@ context made `rjd/mail-send-it'; it must reach smtpmail, not msmtp."
         (should-not (file-exists-p args))
         (should (equal sent (format "From: Me Myself <me@fastmail.example>\nTo: you@example.net\n%s\nHi.\n"
                                     mail-header-separator)))))))
+
+(ert-deftest rjd/mail-send-it-from-an-alias-sends-as-its-account ()
+  "A From of a plus, subdomain or catch-all address goes through the
+account's msmtp, with that From, so msmtp's envelope follows it."
+  (dolist (address rjd/mail-test-alias-addresses)
+    (rjd/mail-test-with-command-log
+      (rjd/mail-test-send
+       log (concat "From: Some One <" address ">\nTo: you@example.net\n%s\nHi.\n")
+       (list rjd/mail-test-gmail rjd/mail-test-fastmail-aliases))
+      (should (equal (rjd/mail-test-file-string args)
+                     (concat "exec\n-i\nmail\nmsmtp\n-a\nfastmail-test\n"
+                             "--read-envelope-from\n-t\n")))
+      (should (string-prefix-p (concat "From: Some One <" address ">\n")
+                               (rjd/mail-test-file-string msg))))))
+
+(ert-deftest rjd/mail-send-it-from-a-near-alias-sends-as-the-default ()
+  "A From the aliases do not match whole goes out the default way."
+  (rjd/mail-test-needs-mu4e)
+  (dolist (address '("someone@fastmail.example.org"
+                     "anything@notsomeone.example"
+                     "me@fastmail.example"))
+    (rjd/mail-test-with-fastmail-defaults
+      (rjd/mail-test-with-command-log
+        (let* ((sent nil)
+               (message-send-mail-function
+                (lambda () (setq sent (buffer-string))))
+               (accounts (list rjd/mail-test-gmail
+                               rjd/mail-test-fastmail-aliases)))
+          (rjd/mail-test-enter
+           (rjd/mail-test-context "fastmail-test" (rjd/mail-contexts accounts)))
+          (rjd/mail-test-send
+           log (concat "From: " address "\nTo: you@example.net\n%s\nHi.\n")
+           accounts)
+          (should-not (file-exists-p args))
+          (should (string-prefix-p (concat "From: " address "\n") sent)))))))
 
 (ert-deftest rjd/mail-send-it-resends-to-resent-to ()
   "A resend goes to the Resent-To addresses, not the original recipients."
@@ -874,6 +948,80 @@ mu4e's context is global and outlives quitting mu4e, so without this
             (should-not (local-variable-p 'user-mail-address))
             (should (eq message-send-mail-function 'smtpmail-send-it)))
         (rjd/mail-mode -1)))))
+
+;;; Replies
+
+(defvar mu4e--context-current)
+(defvar mu4e-compose-context-policy)
+(defvar message-alternative-emails)
+(declare-function mu4e-compose-reply "mu4e-compose")
+
+(defun rjd/mail-test-reply-from (accounts to)
+  "The From of mu4e's reply to a message addressed to TO.
+The message is from you@example.net and is not in any account's
+maildir, so the context is chosen by address alone.  ACCOUNTS are
+declared, with `rjd/mail-mode' on and the Fastmail default as the
+globals.  The reply is mu4e's own, `mu4e-compose-reply', with the mu
+server stood in for: it is not running, and knows no personal
+addresses, so only the context can make the reply's From an alias."
+  (require 'mu4e)
+  (rjd/mail-test-with-fastmail-defaults
+    (let* ((root (make-temp-file "rjd-mail-reply" t))
+           (parent (expand-file-name "parent" root))
+           (msg `(:path ,parent :maildir "/elsewhere" :subject "Hi"
+                  :from ((:name "You" :email "you@example.net"))
+                  :to ((:email ,to))))
+           (rjd/mail-accounts accounts)
+           (rjd/mail-command-prefix nil)
+           (mu4e-contexts nil)
+           (mu4e--context-current nil)
+           (mu4e-compose-context-policy 'pick-first)
+           (mu4e-get-mail-command "true")
+           (mu4e-query-rewrite-function 'identity)
+           (message-alternative-emails nil)
+           (rjd/mail-mode nil)
+           (rjd/mail--before-mode nil)
+           (draft nil))
+      (with-temp-file parent
+        (insert "From: You <you@example.net>\nTo: " to "\nSubject: Hi\n"
+                "Message-Id: <1@example.net>\n"
+                "Date: Sun, 11 Oct 2026 10:00:00 +0000\n\nHello.\n"))
+      (rjd/mail-mode 1)
+      (unwind-protect
+          (cl-letf (((symbol-function 'mu4e-running-p) #'always)
+                    ((symbol-function 'mu4e-server-properties) #'ignore)
+                    ((symbol-function 'mu4e-root-maildir) (lambda () root))
+                    ((symbol-function 'mu4e-message-at-point)
+                     (lambda (&rest _) msg))
+                    ((symbol-function 'mu4e-display-buffer) #'ignore))
+            (setq draft (mu4e-compose-reply))
+            (with-current-buffer draft
+              (save-restriction
+                (message-narrow-to-headers)
+                (mail-strip-quoted-names (message-fetch-field "from")))))
+        (when (buffer-live-p draft)
+          (with-current-buffer draft (set-buffer-modified-p nil))
+          (kill-buffer draft))
+        (rjd/mail-mode -1)
+        (delete-directory root t)))))
+
+(ert-deftest rjd/mail-reply-to-an-alias-is-from-that-alias ()
+  "The alias someone wrote to is the one they see answering."
+  (rjd/mail-test-needs-mu4e)
+  (dolist (address rjd/mail-test-alias-addresses)
+    (should (equal (rjd/mail-test-reply-from
+                    (list rjd/mail-test-gmail rjd/mail-test-fastmail-aliases)
+                    address)
+                   address))))
+
+(ert-deftest rjd/mail-reply-to-the-account-is-from-the-account ()
+  "With or without aliases, mail to the address itself is answered from it."
+  (rjd/mail-test-needs-mu4e)
+  (dolist (fastmail (list rjd/mail-test-fastmail rjd/mail-test-fastmail-aliases))
+    (should (equal (rjd/mail-test-reply-from
+                    (list rjd/mail-test-gmail fastmail)
+                    "someone@fastmail.example")
+                   "someone@fastmail.example"))))
 
 ;;; Invitation replies
 
