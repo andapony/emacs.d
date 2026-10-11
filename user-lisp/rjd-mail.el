@@ -61,6 +61,25 @@
 ;; `mu4e-query-rewrite-function' with `rjd/mail-search-query', unless
 ;; a search names them.
 ;;
+;; Replies to calendar invitations need one fix to gnus-icalendar,
+;; which mu4e-icalendar builds them with.  Emacs 31's
+;; `gnus-icalendar-event--build-reply' -- a private function -- copies
+;; every ATTENDEE of the invitation into the REPLY, the organiser's
+;; included, where RFC 5546 allows only the one replying; and Google
+;; ignores such a reply, so the acceptance never reaches the
+;; organiser's calendar (#20).  The mode puts
+;; `rjd/mail--reply-as-one-attendee' around it, which drops every
+;; attendee from the built reply but the one the builder answered for.
+;; It hooks the builder rather than the public
+;; `gnus-icalendar-event-reply-from-buffer' because only there is the
+;; reply still a syntax tree, not text; it finds the replier with the
+;; builder's own `gnus-icalendar-event--find-attendee', also private.
+;; If either is renamed, or the builder starts copying the attendee
+;; nodes rather than reusing them, the advice does nothing -- replies
+;; carry every attendee again and Google ignores them, silently -- so
+;; if an acceptance stops showing on the organiser's calendar, look
+;; here first.  Remove it once Emacs fixes the builder upstream.
+;;
 ;; Enable with `rjd/mail-mode', once mu4e has loaded.
 
 ;;; Code:
@@ -76,6 +95,10 @@
 (declare-function message-narrow-to-headers "message")
 (declare-function message-fetch-field "message")
 (declare-function mail-strip-quoted-names "mail-utils")
+(declare-function gnus-icalendar-event--find-attendee "gnus-icalendar")
+(declare-function icalendar-ast-node-children "icalendar-ast")
+(declare-function icalendar-ast-node-set-children "icalendar-ast")
+(declare-function icalendar-ast-node-type "icalendar-ast")
 (defvar message-send-coding-system)
 (defvar mail-header-separator)
 
@@ -512,6 +535,49 @@ Does nothing before mu4e has started and knows the root."
     (rjd/mail-move-flagged-new-to-cur root)))
 
 
+;;; Invitation replies
+
+(defun rjd/mail--attendees (vcalendar)
+  "The ATTENDEE nodes of VCALENDAR's first VEVENT, and that VEVENT."
+  (let ((vevent (seq-find (lambda (node)
+                            (eq (icalendar-ast-node-type node) 'icalendar-vevent))
+                          (icalendar-ast-node-children vcalendar))))
+    (cons vevent
+          (seq-filter (lambda (node)
+                        (eq (icalendar-ast-node-type node) 'icalendar-attendee))
+                      (and vevent (icalendar-ast-node-children vevent))))))
+
+(defun rjd/mail--reply-as-one-attendee (build vcalendar status ids &rest args)
+  "Call BUILD, then keep only the replying attendee in the reply it returns.
+Advice around `gnus-icalendar-event--build-reply', which BUILD is, and
+which VCALENDAR, STATUS, IDS and ARGS are passed on to.  It copies
+every attendee of the invitation into the reply; RFC 5546 allows only
+the one replying, and Google ignores a reply with more (#20).
+
+The replier is the invitation's attendee that IDS match -- found as
+BUILD finds it -- or, when none does, the one BUILD adds for
+`user-mail-address': the reply's only attendee that is not the
+invitation's.  If neither can be told, as when BUILD changes how it
+makes the reply, the reply is returned as BUILD made it."
+  (let* ((invited (cdr (rjd/mail--attendees vcalendar)))
+         (matched (gnus-icalendar-event--find-attendee invited ids))
+         (reply (apply build vcalendar status ids args))
+         (vevent+attendees (rjd/mail--attendees reply))
+         (vevent (car vevent+attendees))
+         (attendees (cdr vevent+attendees))
+         (replier (if matched
+                      (car (memq matched attendees))
+                    (let ((added (seq-remove (lambda (a) (memq a invited))
+                                             attendees)))
+                      (and (length= added 1) (car added))))))
+    (when replier
+      (apply #'icalendar-ast-node-set-children vevent
+             (seq-remove (lambda (node)
+                           (and (memq node attendees) (not (eq node replier))))
+                         (icalendar-ast-node-children vevent))))
+    reply))
+
+
 ;;; Syncing from startup
 
 ;;;###autoload
@@ -547,7 +613,9 @@ contexts, fetch command and query rewriting it replaced, and the
 global defaults if a context was entered.
 
 While on, each mu4e index first moves the accounts' unread mail that
-carries flags out of new/; see `rjd/mail-move-flagged-new-to-cur'."
+carries flags out of new/; see `rjd/mail-move-flagged-new-to-cur'.
+And a reply to a calendar invitation carries only the attendee who
+replies; see `rjd/mail--reply-as-one-attendee'."
   :global t
   :group 'rjd/mail
   (if rjd/mail-mode
@@ -564,10 +632,14 @@ carries flags out of new/; see `rjd/mail-move-flagged-new-to-cur'."
               mu4e-query-rewrite-function #'rjd/mail-search-query)
         (add-hook 'message-mode-hook #'rjd/mail--restore-default-identity)
         (advice-add 'mu4e-update-index :before
-                    #'rjd/mail--move-flagged-new-before-index))
+                    #'rjd/mail--move-flagged-new-before-index)
+        (advice-add 'gnus-icalendar-event--build-reply :around
+                    #'rjd/mail--reply-as-one-attendee))
     (remove-hook 'message-mode-hook #'rjd/mail--restore-default-identity)
     (advice-remove 'mu4e-update-index
                    #'rjd/mail--move-flagged-new-before-index)
+    (advice-remove 'gnus-icalendar-event--build-reply
+                   #'rjd/mail--reply-as-one-attendee)
     (when rjd/mail--before-mode
       (rjd/mail--leave)
       (setq mu4e-contexts (nth 0 rjd/mail--before-mode)

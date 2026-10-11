@@ -796,6 +796,108 @@ mu4e's context is global and outlives quitting mu4e, so without this
             (should (eq message-send-mail-function 'smtpmail-send-it)))
         (rjd/mail-mode -1)))))
 
+;;; Invitation replies
+
+(defconst rjd/mail-test-invitation
+  "BEGIN:VCALENDAR
+PRODID:-//Google Inc//Google Calendar 70.9054//EN
+VERSION:2.0
+CALSCALE:GREGORIAN
+METHOD:REQUEST
+BEGIN:VEVENT
+DTSTART:20261011T003000Z
+DTEND:20261011T013000Z
+DTSTAMP:20261011T001500Z
+ORGANIZER;CN=Org Person:mailto:org@example.com
+UID:abc123@google.com
+ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED;RSVP=TRUE;CN=Org Person;X-NUM-GUESTS=0:mailto:org@example.com
+ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=me@example.net;X-NUM-GUESTS=0:mailto:me@example.net
+CREATED:20261011T001500Z
+DESCRIPTION:hello
+LAST-MODIFIED:20261011T001500Z
+LOCATION:
+SEQUENCE:0
+STATUS:CONFIRMED
+SUMMARY:First invitation
+TRANSP:OPAQUE
+END:VEVENT
+END:VCALENDAR
+"
+  "A Google Calendar invitation, as Google sends it, to me@example.net.
+The organiser is an attendee too, as Google always makes them.")
+
+(defun rjd/mail-test-reply (status ids)
+  "The lines of the reply to `rjd/mail-test-invitation' with STATUS.
+Built by gnus-icalendar for the attendee matching IDS, with
+`rjd/mail-mode' on, and stamped at 2026-10-12 09:00 UTC."
+  (require 'gnus-icalendar)
+  (let ((rjd/mail-accounts nil)
+        (mu4e-contexts nil)
+        (mu4e-get-mail-command "true")
+        (mu4e-query-rewrite-function 'identity)
+        (rjd/mail-mode nil)
+        (rjd/mail--before-mode nil)
+        (user-mail-address "crasher@example.org")
+        (user-full-name "Party Crasher")
+        (decode-time (symbol-function 'decode-time)))
+    (rjd/mail-mode 1)
+    (unwind-protect
+        (cl-letf (((symbol-function 'decode-time)
+                   (lambda (&optional time &rest args)
+                     (apply decode-time
+                            (or time (encode-time '(0 0 9 12 10 2026 nil nil t)))
+                            args))))
+          (with-temp-buffer
+            (insert rjd/mail-test-invitation)
+            (split-string
+             (gnus-icalendar-event-reply-from-buffer (current-buffer) status ids)
+             "\r?\n" t)))
+      (rjd/mail-mode -1))))
+
+(defun rjd/mail-test-attendees (lines)
+  "The ATTENDEE lines among LINES."
+  (seq-filter (lambda (line) (string-prefix-p "ATTENDEE" line)) lines))
+
+(ert-deftest rjd/mail-reply-carries-only-the-replying-attendee ()
+  "Google ignores a REPLY with more than one ATTENDEE (#20)."
+  (dolist (case '((accepted . "ACCEPTED")
+                  (tentative . "TENTATIVE")
+                  (declined . "DECLINED")))
+    (let ((reply (rjd/mail-test-reply (car case) '("me@example\\.net"))))
+      (should (equal (rjd/mail-test-attendees reply)
+                     (list (concat "ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;"
+                                   "PARTSTAT=" (cdr case) ";RSVP=TRUE;"
+                                   "CN=me@example.net;X-NUM-GUESTS=0:"
+                                   "mailto:me@example.net")))))))
+
+(ert-deftest rjd/mail-reply-keeps-the-event-it-answers ()
+  "Only the attendees change: the reply still names the same event."
+  (let ((reply (rjd/mail-test-reply 'accepted '("me@example\\.net"))))
+    (should (member "METHOD:REPLY" reply))
+    (should (member "UID:abc123@google.com" reply))
+    (should (member "SEQUENCE:0" reply))
+    (should (member "ORGANIZER;CN=Org Person:mailto:org@example.com" reply))
+    (should (member "DTSTAMP:20261012T090000Z" reply))))
+
+(ert-deftest rjd/mail-reply-without-a-match-carries-only-the-added-attendee ()
+  "Invited through a list, say: the reply answers for the added attendee."
+  (let ((reply (rjd/mail-test-reply 'accepted '("nobody@example\\.com"))))
+    (should (equal (rjd/mail-test-attendees reply)
+                   '("ATTENDEE;CN=Party Crasher;PARTSTAT=ACCEPTED:mailto:crasher@example.org")))))
+
+(ert-deftest rjd/mail-reply-is-left-alone-with-the-mode-off ()
+  "The fix is the mode's: off, gnus-icalendar builds the reply as it does."
+  ;; Turns the mode on and off again, so this is after the mode.
+  (rjd/mail-test-reply 'accepted '("me@example\\.net"))
+  (with-temp-buffer
+    (insert rjd/mail-test-invitation)
+    (should (length= (rjd/mail-test-attendees
+                      (split-string (gnus-icalendar-event-reply-from-buffer
+                                     (current-buffer) 'accepted
+                                     '("me@example\\.net"))
+                                    "\r?\n" t))
+                     2))))
+
 
 (provide 'rjd-mail-test)
 ;;; rjd-mail-test.el ends here
