@@ -1357,9 +1357,9 @@ the abbrevs in the major mode's abbrev table rather than the global one."
 ;; Mail accounts are declared in private.el as `rjd/mail-accounts', and
 ;; `rjd/mail-mode' (user-lisp/rjd-mail.el) makes each one a mu4e context.
 ;; Fastmail is one of them, beside Gmail, where mail can run.  Outside
-;; every context the settings below, and private.el's identity and
-;; smtpmail, are the Fastmail default; entering a context replaces them
-;; with the account's, and leaving puts them back.  With no account
+;; every context the settings below, and private.el's identity, are the
+;; Fastmail default; entering a context replaces them with the
+;; account's, and leaving puts them back.  With no account
 ;; declared there are no contexts and an update only indexes.  If an
 ;; upgrade breaks the contexts, turn `rjd/mail-mode' off.
 ;;
@@ -1412,12 +1412,13 @@ the abbrevs in the major mode's abbrev table rather than the global one."
   (mu4e-trash-folder  "/Trash")
   (mu4e-refile-folder "/Archive")
 
-  ;; Outside every context sending goes out over SMTP; the server, port,
-  ;; stream type and the identity to send as are all set in private.el.
-  ;; Without that file mu4e still reads mail, and sending is simply
-  ;; unconfigured.  A context sends with `rjd/mail-send-it' instead,
-  ;; which sends mail from a declared account through msmtp and hands
-  ;; any other back to this; leaving the context puts this back.
+  ;; Where no account is active -- leroy, bulldog -- sending goes out
+  ;; over SMTP; the server, port, stream type and the identity to send
+  ;; as are all set in private.el.  Without that file mu4e still reads
+  ;; mail, and sending is simply unconfigured.  Where accounts are
+  ;; active `rjd/mail-mode' replaces this with `rjd/mail-send-it', in
+  ;; and out of mu4e, which sends mail from an account's address through
+  ;; its msmtp and hands any other From back to this.
   (message-send-mail-function   'smtpmail-send-it)
 
   ;; Gmail keeps one message under many labels, and every synced folder

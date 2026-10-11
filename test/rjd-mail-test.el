@@ -913,7 +913,9 @@ container -- decided by the machine, not forced."
 (ert-deftest rjd/mail-message-mode-outside-mu4e-keeps-fastmail ()
   "Plain message-mode sends as the Fastmail default, inside a context too.
 mu4e's context is global and outlives quitting mu4e, so without this
-\\[compose-mail] would send as whichever account mu4e last used."
+\\[compose-mail] would send as whichever account mu4e last used.  It
+sends with `rjd/mail-send-it', the default where accounts are active,
+which chooses by From."
   (rjd/mail-test-needs-mu4e)
   (rjd/mail-test-in-gmail-context
     (should (equal user-mail-address "someone@example.com"))
@@ -921,7 +923,7 @@ mu4e's context is global and outlives quitting mu4e, so without this
       (message-mode)
       (should (equal user-mail-address "me@fastmail.example"))
       (should (equal user-full-name "Me Myself"))
-      (should (eq message-send-mail-function 'smtpmail-send-it)))))
+      (should (eq message-send-mail-function #'rjd/mail-send-it)))))
 
 (ert-deftest rjd/mail-mu4e-compose-uses-the-context ()
   "mu4e's own compose buffers send as the context's account."
@@ -934,7 +936,8 @@ mu4e's context is global and outlives quitting mu4e, so without this
       (should (eq message-send-mail-function #'rjd/mail-send-it)))))
 
 (ert-deftest rjd/mail-message-mode-outside-every-context ()
-  "With no context entered message-mode is left alone."
+  "With no context entered message-mode is left alone.
+It sends with the global default, `rjd/mail-send-it'."
   (rjd/mail-test-needs-mu4e)
   (rjd/mail-test-with-fastmail-defaults
     (let ((rjd/mail-accounts (list rjd/mail-test-gmail))
@@ -947,7 +950,7 @@ mu4e's context is global and outlives quitting mu4e, so without this
           (with-temp-buffer
             (message-mode)
             (should-not (local-variable-p 'user-mail-address))
-            (should (eq message-send-mail-function 'smtpmail-send-it)))
+            (should (eq message-send-mail-function #'rjd/mail-send-it)))
         (rjd/mail-mode -1)))))
 
 (ert-deftest rjd/mail-aliases-stay-inside-mu4e ()
@@ -977,6 +980,104 @@ and leaving the context puts the default back."
             (rjd/mail-test-leave context)
             (should-not message-alternative-emails))
         (rjd/mail-mode -1)))))
+
+(defconst rjd/mail-test-fastmail-default
+  (append '(:address "me@fastmail.example") rjd/mail-test-fastmail)
+  "The Fastmail account, its address the global default's, as on the Mac.")
+
+(defmacro rjd/mail-test-outside-mu4e (&rest body)
+  "Run BODY with `rjd/mail-mode' on, Gmail and Fastmail declared.
+Fastmail's address is the global default's.  smtpmail is stood in for:
+`smtpmail-sent' is the message it was handed, or nil.  BODY runs
+inside `rjd/mail-test-with-command-log', so `log' stands in for msmtp
+and `args' is the file it writes."
+  (declare (indent 0))
+  `(rjd/mail-test-with-fastmail-defaults
+     (rjd/mail-test-with-command-log
+       (let* ((smtpmail-sent nil)
+              (rjd/mail-accounts (list rjd/mail-test-gmail
+                                       rjd/mail-test-fastmail-default))
+              (rjd/mail-command-prefix (list "sh" "-c" log "sh"
+                                             "exec" "-i" "mail"))
+              (mu4e-contexts nil)
+              (mu4e-get-mail-command "true")
+              (rjd/mail-mode nil)
+              (rjd/mail--before-mode nil)
+              (message-mode-hook nil))
+         (cl-letf (((symbol-function 'smtpmail-send-it)
+                    (lambda () (setq smtpmail-sent (buffer-string)))))
+           (rjd/mail-mode 1)
+           (unwind-protect
+               (progn ,@body)
+             (rjd/mail-mode -1)))))))
+
+(defun rjd/mail-test-send-outside-mu4e (from)
+  "Send a message from FROM as \\[compose-mail] would, outside mu4e.
+With whatever `message-send-mail-function' a message-mode buffer gets."
+  (require 'sendmail)
+  (with-temp-buffer
+    (message-mode)
+    (insert (format "From: %s\nTo: you@example.net\n%s\nHi.\n"
+                    from mail-header-separator))
+    (funcall message-send-mail-function)))
+
+(ert-deftest rjd/mail-outside-mu4e-sends-through-the-account-before-any-context ()
+  "With no context ever entered, mail from the default address goes
+through its account's msmtp, not smtpmail, which has no credentials on
+the Mac (#28); mail from no account's address still goes to smtpmail."
+  (rjd/mail-test-needs-mu4e)
+  (rjd/mail-test-outside-mu4e
+    (rjd/mail-test-send-outside-mu4e "Me Myself <me@fastmail.example>")
+    (should (string-match-p "^-a\nfastmail-test\n"
+                            (rjd/mail-test-file-string args)))
+    (should-not smtpmail-sent)
+    (delete-file args)
+    (rjd/mail-test-send-outside-mu4e "stranger@example.net")
+    (should-not (file-exists-p args))
+    (should (string-prefix-p "From: stranger@example.net\n" smtpmail-sent))))
+
+(ert-deftest rjd/mail-outside-mu4e-sends-through-the-account-after-a-context ()
+  "With a context still entered, as after mu4e quits, and after leaving
+it, mail outside mu4e from the default address goes through its
+account's msmtp, not back to smtpmail."
+  (rjd/mail-test-needs-mu4e)
+  (rjd/mail-test-outside-mu4e
+    (let ((gmail (rjd/mail-test-context "gmail-test" mu4e-contexts)))
+      (rjd/mail-test-enter gmail)
+      (rjd/mail-test-send-outside-mu4e "me@fastmail.example")
+      (should (string-match-p "^-a\nfastmail-test\n"
+                              (rjd/mail-test-file-string args)))
+      (delete-file args)
+      (rjd/mail-test-leave gmail)
+      (rjd/mail-test-send-outside-mu4e "me@fastmail.example")
+      (should (string-match-p "^-a\nfastmail-test\n"
+                              (rjd/mail-test-file-string args)))
+      (should-not smtpmail-sent))))
+
+(ert-deftest rjd/mail-outside-mu4e-without-active-accounts-keeps-smtpmail ()
+  "Where no account is active -- leroy, bulldog -- the default stays
+smtpmail, with the mode on and after it is turned off."
+  (rjd/mail-test-needs-mu4e)
+  (rjd/mail-test-where-mail-cannot-run
+    (let ((message-send-mail-function 'smtpmail-send-it)
+          (mu4e-contexts nil)
+          (mu4e-get-mail-command "true")
+          (rjd/mail-mode nil)
+          (rjd/mail--before-mode nil))
+      (rjd/mail-mode 1)
+      (unwind-protect
+          (should (eq message-send-mail-function 'smtpmail-send-it))
+        (rjd/mail-mode -1))
+      (should (eq message-send-mail-function 'smtpmail-send-it)))))
+
+(ert-deftest rjd/mail-mode-off-restores-smtpmail ()
+  "Turning the mode off puts smtpmail back as the default."
+  (rjd/mail-test-needs-mu4e)
+  (rjd/mail-test-outside-mu4e
+    (should (eq message-send-mail-function #'rjd/mail-send-it))
+    (rjd/mail-test-enter (car mu4e-contexts))
+    (rjd/mail-mode -1)
+    (should (eq message-send-mail-function 'smtpmail-send-it))))
 
 
 ;;; Replies

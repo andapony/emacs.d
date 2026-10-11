@@ -19,13 +19,21 @@
 ;; mbsync that is not set up for them.  `rjd/mail-enabled' overrides
 ;; the decision.
 ;;
-;; The global settings -- `user-mail-address', smtpmail and the rest --
-;; stay the Fastmail default that private.el sets, and they are what
-;; mail written outside mu4e uses.  Entering a context saves whatever
-;; values it is about to change and sets the account's; leaving puts
-;; the saved ones back.  mu4e itself restores nothing on leaving: its
-;; context `vars' are plain `set's.  So everything here goes through
-;; the enter and leave functions, never `vars'.
+;; The global settings -- `user-mail-address' and the rest -- stay the
+;; Fastmail default that private.el sets, and they are what mail
+;; written outside mu4e uses.  The exception is sending: where accounts
+;; are active the mode makes `rjd/mail-send-it' the global
+;; `message-send-mail-function', in place of smtpmail, which has no
+;; credentials on the host (#28).  So mail from the default address
+;; goes through its account's msmtp, inside mu4e or out, and any other
+;; From still goes to smtpmail.  With no account active, smtpmail stays
+;; the default.
+;;
+;; Entering a context saves whatever values it is about to change and
+;; sets the account's; leaving puts the saved ones back.  mu4e itself
+;; restores nothing on leaving: its context `vars' are plain `set's.
+;; So everything here goes through the enter and leave functions, never
+;; `vars'.
 ;;
 ;; A context stays entered while mu4e runs, and after it quits, so the
 ;; globals are then the account's.  A message buffer that is not mu4e's
@@ -43,11 +51,12 @@
 ;; a machine without the mail container.  If the choice is wrong, set
 ;; `rjd/mail-command-prefix' in private.el.
 ;;
-;; A context sends with `rjd/mail-send-it' as
-;; `message-send-mail-function'.  It decides at send time, from the
+;; Every context sends with `rjd/mail-send-it' as
+;; `message-send-mail-function', and so, where accounts are active, does
+;; mail outside every context.  It decides at send time, from the
 ;; message's From: an active account's address goes through that
 ;; account's msmtp, behind the prefix; any other address goes to the
-;; sending function the context replaced, smtpmail.  So a draft sends
+;; sending function the mode replaced, smtpmail.  So a draft sends
 ;; as the account it was written as, whichever context is current when
 ;; it is sent.  It is its own function rather than message's sendmail
 ;; one, which puts "-oi" straight after the program and so would run
@@ -106,6 +115,7 @@
 (defvar mu4e-contexts)
 (defvar mu4e-get-mail-command)
 (defvar mu4e-query-rewrite-function)
+(defvar message-send-mail-function)
 (declare-function mu4e-root-maildir "mu4e-server")
 (declare-function message-narrow-to-headers "message")
 (declare-function message-fetch-field "message")
@@ -437,19 +447,26 @@ One of an account's addresses is its :address or an alias its
   (rjd/mail-command "msmtp" "-a" (rjd/mail--msmtp-account account)
                     "--read-envelope-from"))
 
+(defvar rjd/mail--fallback-send-function nil
+  "The `message-send-mail-function' `rjd/mail-mode' replaced, or nil.
+Where accounts are active the mode makes `rjd/mail-send-it' the
+global default, and this -- smtpmail -- is what it sends with for a
+From that no active account owns.")
+
 (defun rjd/mail-send-it ()
   "Send the prepared message buffer as the account in its From.
-A `message-send-mail-function', which entering a context sets.  The
-account is chosen now, from the message, not from the context: a draft
-outlives the context it was written in, and message sends with the
-global function, so a draft begun outside mu4e before any context was
-entered comes here too.
+A `message-send-mail-function': the global default where accounts are
+active, which `rjd/mail-mode' sets, and the one every context sets.
+The account is chosen now, from the message, not from the context: a
+draft outlives the context it was written in, and mail written outside
+mu4e comes here too.
 
 From an active account, the message goes to that account's msmtp,
 behind `rjd/mail-command-prefix' as it is now; msmtp reads the
 recipients from the message (-t), or for a resend is given those of
 its Resent-To.  From any other address it goes to the sending function
-the context replaced -- smtpmail, for the Fastmail default.
+the mode replaced, `rjd/mail--fallback-send-function' -- smtpmail -- or
+failing that the one a context replaced.
 
 Not `message-send-mail-with-sendmail', which puts \"-oi\" straight
 after `sendmail-program': with the program \"docker\" and the rest of
@@ -463,7 +480,8 @@ the prefixed command in `message-sendmail-extra-arguments', that makes
          (account (rjd/mail--account-for-address (nth 0 headers)))
          (resent-to (nth 1 headers)))
     (if (not account)
-        (funcall (or (alist-get 'message-send-mail-function rjd/mail--saved)
+        (funcall (or rjd/mail--fallback-send-function
+                     (alist-get 'message-send-mail-function rjd/mail--saved)
                      (error "No account sends as %s, and no default to send with"
                             (nth 0 headers))))
       ;; The separator line becomes the blank line that ends the headers.
@@ -648,9 +666,13 @@ leroy and bulldog, and a machine with none declared, start nothing."
 Also fetch mail for them through `rjd/mail-get-mail-command', leave
 their Spam and Trash out of every search that does not ask for them,
 through `rjd/mail-search-query', and keep message buffers outside mu4e
-on the global default identity.  Turning the mode off puts back the
-contexts, fetch command and query rewriting it replaced, and the
-global defaults if a context was entered.
+on the global default identity.  With accounts active, make
+`rjd/mail-send-it' the global `message-send-mail-function', so mail
+from an account's address goes through its msmtp wherever it was
+written; it hands any other From to the function it replaced.
+Turning the mode off puts back the contexts, fetch command, query
+rewriting and sending function it replaced, and the global defaults
+if a context was entered.
 
 While on, each mu4e index first moves the accounts' unread mail that
 carries flags out of new/; see `rjd/mail-move-flagged-new-to-cur'.
@@ -670,6 +692,10 @@ replies; see `rjd/mail--reply-as-one-attendee'."
         (setq mu4e-contexts (rjd/mail-contexts)
               mu4e-get-mail-command #'rjd/mail-get-mail-command
               mu4e-query-rewrite-function #'rjd/mail-search-query)
+        (when (and (rjd/mail-active-accounts)
+                   (not rjd/mail--fallback-send-function))
+          (setq rjd/mail--fallback-send-function message-send-mail-function
+                message-send-mail-function #'rjd/mail-send-it))
         (add-hook 'message-mode-hook #'rjd/mail--restore-default-identity)
         (advice-add 'mu4e-update-index :before
                     #'rjd/mail--move-flagged-new-before-index)
@@ -685,7 +711,10 @@ replies; see `rjd/mail--reply-as-one-attendee'."
       (setq mu4e-contexts (nth 0 rjd/mail--before-mode)
             mu4e-get-mail-command (nth 1 rjd/mail--before-mode)
             mu4e-query-rewrite-function (nth 2 rjd/mail--before-mode)
-            rjd/mail--before-mode nil))))
+            rjd/mail--before-mode nil))
+    (when rjd/mail--fallback-send-function
+      (setq message-send-mail-function rjd/mail--fallback-send-function
+            rjd/mail--fallback-send-function nil))))
 
 (provide 'rjd-mail)
 ;;; rjd-mail.el ends here

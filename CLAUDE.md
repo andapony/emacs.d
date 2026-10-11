@@ -90,11 +90,11 @@ rather than to fix it under pressure.
 mu4e reads mail through `rjd-mail` (user-lisp), which turns the
 accounts declared in `private.el` as `rjd/mail-accounts` into mu4e
 contexts.  Entering one sets the account's identity and folders, and
-leaving it restores the global defaults -- the Fastmail identity and
-smtpmail -- so mail written outside mu4e is unchanged; with no account
+leaving it restores the global defaults -- the Fastmail identity -- so
+mail written outside mu4e keeps that identity; with no account
 declared there are no contexts.  A context stays entered after mu4e
 quits, so message buffers outside mu4e get the default identity and
-smtpmail back buffer-locally, from `message-mode-hook`.
+sending function back buffer-locally, from `message-mode-hook`.
 `rjd/mail-mode` also keeps each account's Spam and Trash out of every
 search that does not name them, through `mu4e-query-rewrite-function`.
 It is opt-in, enabled from mu4e's form in `init.el`, which also starts
@@ -113,7 +113,13 @@ reads it as PCRE and mu4e as an Emacs regexp.
 Sending is decided by the message's From, at send time:
 `rjd/mail-send-it` sends an active account's mail through that
 account's msmtp and hands any other to smtpmail, so a draft goes out
-as the account it was written as, whatever context is current.  It is
+as the account it was written as, whatever context is current.  Where
+accounts are active `rjd/mail-mode` makes it the global
+`message-send-mail-function`, not only the contexts', because smtpmail
+has no credentials on the Mac: so `C-x m` from the Fastmail address
+goes through Fastmail's msmtp too.  smtpmail, which `init.el` sets,
+stays the fallback for any other From, and the default where no
+account is active.  It is
 its own function, not message's sendmail path, whose `-oi` would land
 inside the prefix (`docker -oi exec ...`).
 
