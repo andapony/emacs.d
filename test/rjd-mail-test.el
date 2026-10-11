@@ -76,6 +76,18 @@
     :mbsync-group "other-group")
   "An account that overrides every default.")
 
+(defconst rjd/mail-test-fastmail
+  '(:name "fastmail-test"
+    :address "someone@fastmail.example"
+    :full-name "Some One"
+    :maildir "/fastmail-test"
+    :folders (:inbox "/INBOX" :sent "/Sent" :drafts "/Drafts"
+              :trash "/Trash" :refile "/Archive" :spam "/Spam")
+    :sent-messages-behavior sent)
+  "A Fastmail account, declared as private.el declares the real one.
+Fastmail's folders sit at the top level under their own names, and it
+does not file mail sent over SMTP, so mu4e must; the rest is default.")
+
 (defmacro rjd/mail-test-with-fastmail-defaults (&rest body)
   "Run BODY with the global mail settings as the Fastmail default."
   (declare (indent 0))
@@ -250,6 +262,13 @@ is not set up for these accounts."
     (should (equal (rjd/mail-get-mail-command)
                    "docker exec -i mail\\ box mbsync gmail-test"))))
 
+(ert-deftest rjd/mail-get-mail-command-for-gmail-and-fastmail ()
+  "One update syncs both accounts, through the mail container."
+  (let ((rjd/mail-command-prefix '("docker" "exec" "-i" "mail"))
+        (rjd/mail-accounts (list rjd/mail-test-gmail rjd/mail-test-fastmail)))
+    (should (equal (rjd/mail-get-mail-command)
+                   "docker exec -i mail mbsync gmail-test fastmail-test"))))
+
 (ert-deftest rjd/mail-get-mail-command-without-accounts ()
   "With nothing declared there is nothing to fetch, only to index."
   (let ((rjd/mail-command-prefix '("docker" "exec" "-i" "mail"))
@@ -328,6 +347,55 @@ is not set up for these accounts."
       (rjd/mail-test-leave other)
       (should (equal user-mail-address "me@fastmail.example"))
       (should (eq mu4e-sent-messages-behavior 'sent)))))
+
+(ert-deftest rjd/mail-entering-gmail-or-fastmail-sets-its-own ()
+  "With Gmail and Fastmail declared, each context sets its own account's
+folders and sent behaviour, not the other's."
+  (rjd/mail-test-needs-mu4e)
+  (rjd/mail-test-with-fastmail-defaults
+    (let* ((contexts (rjd/mail-contexts
+                      (list rjd/mail-test-gmail rjd/mail-test-fastmail)))
+           (gmail (rjd/mail-test-context "gmail-test" contexts))
+           (fastmail (rjd/mail-test-context "fastmail-test" contexts)))
+      (rjd/mail-test-enter fastmail)
+      (should (equal user-mail-address "someone@fastmail.example"))
+      (should (eq message-send-mail-function #'rjd/mail-send-it))
+      (should (equal mu4e-sent-folder "/fastmail-test/Sent"))
+      (should (equal mu4e-drafts-folder "/fastmail-test/Drafts"))
+      (should (equal mu4e-trash-folder "/fastmail-test/Trash"))
+      (should (equal mu4e-refile-folder "/fastmail-test/Archive"))
+      (should (eq mu4e-sent-messages-behavior 'sent))
+      (should (eq mu4e-trash-without-flag t))
+      (rjd/mail-test-leave fastmail)
+      (rjd/mail-test-enter gmail)
+      (should (equal user-mail-address "someone@example.com"))
+      (should (equal mu4e-sent-folder "/gmail-test/sent"))
+      (should (equal mu4e-drafts-folder "/gmail-test/drafts"))
+      (should (equal mu4e-trash-folder "/gmail-test/trash"))
+      (should (equal mu4e-refile-folder "/gmail-test/all"))
+      (should (eq mu4e-sent-messages-behavior 'delete))
+      (rjd/mail-test-leave gmail))))
+
+(ert-deftest rjd/mail-leaving-gmail-or-fastmail-restores-the-default ()
+  "Leaving either context, Fastmail's included, puts back the global
+Fastmail identity and smtpmail, which mail outside mu4e uses."
+  (rjd/mail-test-needs-mu4e)
+  (dolist (name '("gmail-test" "fastmail-test"))
+    (rjd/mail-test-with-fastmail-defaults
+      (let ((context (rjd/mail-test-context
+                      name (rjd/mail-contexts
+                            (list rjd/mail-test-gmail rjd/mail-test-fastmail)))))
+        (rjd/mail-test-enter context)
+        (rjd/mail-test-leave context)
+        (should (equal user-mail-address "me@fastmail.example"))
+        (should (equal user-full-name "Me Myself"))
+        (should (eq message-send-mail-function 'smtpmail-send-it))
+        (should (equal mu4e-sent-folder "/Sent"))
+        (should (equal mu4e-drafts-folder "/Drafts"))
+        (should (equal mu4e-trash-folder "/Trash"))
+        (should (equal mu4e-refile-folder "/Archive"))
+        (should (eq mu4e-sent-messages-behavior 'sent))
+        (should (eq mu4e-trash-without-flag nil))))))
 
 (ert-deftest rjd/mail-context-matches-its-own-mail ()
   (rjd/mail-test-needs-mu4e)
@@ -503,6 +571,17 @@ send with: no account, and no default saved to fall back on."
     (should (equal (rjd/mail-search-query "flag:unread AND NOT flag:trashed")
                    (concat "(flag:unread AND NOT flag:trashed)"
                            rjd/mail-test-junk-clause)))))
+
+(ert-deftest rjd/mail-search-leaves-out-gmail-and-fastmail-junk ()
+  "Fastmail's Spam and Trash stay out of searches, as Gmail's do."
+  (let ((rjd/mail-accounts (list rjd/mail-test-gmail rjd/mail-test-fastmail)))
+    (should (equal (rjd/mail-search-query "flag:unread")
+                   (concat "(flag:unread) AND NOT (maildir:/gmail-test/spam"
+                           " OR maildir:/gmail-test/trash"
+                           " OR maildir:/fastmail-test/Spam"
+                           " OR maildir:/fastmail-test/Trash)")))
+    (should (equal (rjd/mail-search-query "maildir:/fastmail-test/Spam")
+                   "maildir:/fastmail-test/Spam"))))
 
 (ert-deftest rjd/mail-search-naming-junk-is-left-alone ()
   "A search that names a Spam or Trash folder, or trashed mail, finds it."
