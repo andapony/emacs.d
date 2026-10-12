@@ -296,6 +296,15 @@ never runs `emacs-startup-hook'."
   (should (memq #'rjd/mail-start-syncing emacs-startup-hook))
   (should (fboundp 'rjd/mail-start-syncing)))
 
+(ert-deftest rjd/smoke-mail-is-written-in-mu4e ()
+  "C-x m opens mu4e's compose, whose agent is defined before mu4e loads.
+Checked against the features init.el alone loaded, since other tests
+load mu4e.  Skipped where mu4e is not installed."
+  (skip-unless (locate-library "mu4e"))
+  (should (eq mail-user-agent 'mu4e-user-agent))
+  (should (eq (get 'mu4e-user-agent 'composefunc) #'mu4e-compose-mail))
+  (should-not (memq 'mu4e rjd/smoke-features-after-init)))
+
 (ert-deftest rjd/smoke-mu4e-links-follow-before-mu4e-loads ()
   "An org mu4e: link is followed by `mu4e-org-open', autoloaded."
   (require 'org)

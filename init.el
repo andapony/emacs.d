@@ -1419,6 +1419,18 @@ quitting the corrections stops the send and leaves the draft open."
   :bind ("C-c M" . mu4e)
   :init
   (add-hook 'emacs-startup-hook #'rjd/mail-start-syncing)
+  ;; All mail is written in mu4e: `compose-mail' -- C-x m, a mailto:
+  ;; link, a bug report -- opens mu4e's compose, so it asks which account
+  ;; to send as and files the sent copy, which Fastmail does not.  mu4e
+  ;; starts itself if it has not.  The agent is defined by mu4e's
+  ;; autoloads, which nothing else loads before mu4e itself, and
+  ;; `compose-mail' fails on an undefined one, so they are loaded here.
+  ;; Set here rather than under `:custom' because it depends on them:
+  ;; where mu is not installed, C-x m stays message's own.
+  (unless (get 'mu4e-user-agent 'composefunc)
+    (load "mu4e-autoloads" t t))
+  (when (get 'mu4e-user-agent 'composefunc)
+    (setq mail-user-agent 'mu4e-user-agent))
   :custom
   (mu4e-update-interval 300)
   ;; On entering mu4e, take the first context rather than asking: mail

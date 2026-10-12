@@ -116,8 +116,14 @@ account's msmtp and hands any other to smtpmail, so a draft goes out
 as the account it was written as, whatever context is current.  Where
 accounts are active `rjd/mail-mode` makes it the global
 `message-send-mail-function`, not only the contexts', because smtpmail
-has no credentials on the Mac: so `C-x m` from the Fastmail address
-goes through Fastmail's msmtp too.  smtpmail, which `init.el` sets,
+has no credentials on the Mac: so mail from the Fastmail address goes
+through Fastmail's msmtp from any message buffer.  `C-x m` itself, and
+everything else that calls `compose-mail`, opens mu4e's compose:
+mu4e's form makes `mu4e-user-agent` the `mail-user-agent` wherever mu4e
+is installed, so all mail is written in a context and filed.  Only
+`message-mail` called directly still makes a buffer outside mu4e.
+Mail is spell-checked as it is sent, by jinx (see Spelling in
+`init.el`).  smtpmail, which `init.el` sets,
 stays the fallback for any other From, and the default where no
 account is active.  It is
 its own function, not message's sendmail path, whose `-oi` would land
