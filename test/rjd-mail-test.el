@@ -110,6 +110,7 @@ plus, subdomain and catch-all.")
   `(let ((user-mail-address "me@fastmail.example")
          (user-full-name "Me Myself")
          (message-send-mail-function 'smtpmail-send-it)
+         (message-user-fqdn nil)
          (mu4e-sent-folder "/Sent")
          (mu4e-drafts-folder "/Drafts")
          (mu4e-trash-folder "/Trash")
@@ -312,6 +313,8 @@ is not set up for these accounts."
      (car (rjd/mail-contexts (list rjd/mail-test-gmail))))
     (should (equal user-mail-address "someone@example.com"))
     (should (equal user-full-name "Some One"))
+    ;; A Message-ID names the account's domain, not this machine.
+    (should (equal message-user-fqdn "example.com"))
     (should (equal mu4e-sent-folder "/gmail-test/sent"))
     (should (equal mu4e-drafts-folder "/gmail-test/drafts"))
     (should (equal mu4e-trash-folder "/gmail-test/trash"))
@@ -341,6 +344,7 @@ is not set up for these accounts."
       (should (equal user-mail-address "me@fastmail.example"))
       (should (equal user-full-name "Me Myself"))
       (should (eq message-send-mail-function 'smtpmail-send-it))
+      (should-not message-user-fqdn)
       (should (equal mu4e-sent-folder "/Sent"))
       (should (equal mu4e-drafts-folder "/Drafts"))
       (should (equal mu4e-trash-folder "/Trash"))
@@ -375,6 +379,7 @@ folders and sent behaviour, not the other's."
            (fastmail (rjd/mail-test-context "fastmail-test" contexts)))
       (rjd/mail-test-enter fastmail)
       (should (equal user-mail-address "someone@fastmail.example"))
+      (should (equal message-user-fqdn "fastmail.example"))
       (should (eq message-send-mail-function #'rjd/mail-send-it))
       (should (equal mu4e-sent-folder "/fastmail-test/Sent"))
       (should (equal mu4e-drafts-folder "/fastmail-test/Drafts"))
@@ -406,6 +411,7 @@ Fastmail identity and smtpmail, which mail outside mu4e uses."
         (should (equal user-mail-address "me@fastmail.example"))
         (should (equal user-full-name "Me Myself"))
         (should (eq message-send-mail-function 'smtpmail-send-it))
+        (should-not message-user-fqdn)
         (should (equal mu4e-sent-folder "/Sent"))
         (should (equal mu4e-drafts-folder "/Drafts"))
         (should (equal mu4e-trash-folder "/Trash"))
@@ -923,6 +929,7 @@ which chooses by From."
       (message-mode)
       (should (equal user-mail-address "me@fastmail.example"))
       (should (equal user-full-name "Me Myself"))
+      (should-not message-user-fqdn)
       (should (eq message-send-mail-function #'rjd/mail-send-it)))))
 
 (ert-deftest rjd/mail-mu4e-compose-uses-the-context ()
@@ -933,7 +940,13 @@ which chooses by From."
     (with-temp-buffer
       (mu4e-compose-mode)
       (should (equal user-mail-address "someone@example.com"))
-      (should (eq message-send-mail-function #'rjd/mail-send-it)))))
+      (should (eq message-send-mail-function #'rjd/mail-send-it))
+      ;; message prefers a system name with a dot, as the Mac's has, to
+      ;; the domain of the address it sends from.
+      (cl-letf (((symbol-function 'system-name)
+                 (lambda () "somebodys-imac.lan")))
+        (should (string-suffix-p "@example.com>"
+                                 (message-make-message-id)))))))
 
 (ert-deftest rjd/mail-message-mode-outside-every-context ()
   "With no context entered message-mode is left alone.

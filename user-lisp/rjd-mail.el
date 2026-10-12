@@ -37,9 +37,14 @@
 ;;
 ;; A context stays entered while mu4e runs, and after it quits, so the
 ;; globals are then the account's.  A message buffer that is not mu4e's
-;; -- C-x m, say -- therefore gets the default identity, sending
-;; function and `message-alternative-emails' back as buffer-local
-;; values, from `message-mode-hook'.
+;; -- `message-mail', say -- therefore gets the default identity,
+;; sending function, `message-alternative-emails' and Message-ID domain
+;; back as buffer-local values, from `message-mode-hook'.
+;;
+;; The Message-ID domain is `message-user-fqdn', which each context sets
+;; to the domain of the account's address.  Without it message names
+;; the machine, as HOST.lan: a system name with a dot comes
+;; before the address's domain.
 ;;
 ;; The prefix exists because the tools that authenticate -- mbsync,
 ;; msmtp and oama -- run in a mail container on the host, reached
@@ -116,6 +121,7 @@
 (defvar mu4e-get-mail-command)
 (defvar mu4e-query-rewrite-function)
 (defvar message-send-mail-function)
+(defvar message-user-fqdn)
 (declare-function mu4e-root-maildir "mu4e-server")
 (declare-function message-narrow-to-headers "message")
 (declare-function message-fetch-field "message")
@@ -325,16 +331,23 @@ machine without the tools behaves as if none were declared."
   "The msmtp account that sends ACCOUNT's mail."
   (or (plist-get account :msmtp-account) (plist-get account :name)))
 
+(defun rjd/mail--address-domain (address)
+  "The domain of ADDRESS, a bare address: what follows its last @."
+  (substring address (1+ (string-match "@[^@]*\\'" address))))
+
 (defun rjd/mail--settings (account)
   "The variables a context for ACCOUNT sets, as an alist.
 With :addresses, `message-alternative-emails' too, so that a reply is
 from the alias the original was sent to; without it, that is left
-alone."
+alone.  `message-user-fqdn' is the domain of the account's address,
+so a Message-ID names that rather than this machine."
   `(,@(when (plist-get account :addresses)
         `((message-alternative-emails
            . ,(lambda (address) (rjd/mail--address-p account address)))))
     (user-mail-address . ,(plist-get account :address))
     (user-full-name . ,(plist-get account :full-name))
+    (message-user-fqdn
+     . ,(rjd/mail--address-domain (plist-get account :address)))
     (message-send-mail-function . rjd/mail-send-it)
     (mu4e-sent-folder . ,(rjd/mail--folder account :sent))
     (mu4e-drafts-folder . ,(rjd/mail--folder account :drafts))
@@ -371,10 +384,11 @@ An alist of (VARIABLE . VALUE), or nil outside every context.")
 
 (defconst rjd/mail--message-variables
   '(user-mail-address user-full-name message-send-mail-function
-    message-alternative-emails)
+    message-alternative-emails message-user-fqdn)
   "The variables a context sets that decide who a message is from.
 `message-alternative-emails' among them: with an account's aliases in
-it, a reply outside mu4e would be from an alias.")
+it, a reply outside mu4e would be from an alias.  And
+`message-user-fqdn', which names the account's domain in a Message-ID.")
 
 (defun rjd/mail--restore-default-identity ()
   "Make a message buffer outside mu4e send as the global default.
