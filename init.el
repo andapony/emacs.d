@@ -1450,12 +1450,12 @@ quitting the corrections stops the send and leaves the draft open."
   (mu4e-compose-context-policy 'ask)
 
   ;; Folders outside every context.  Each context sets its account's.
-  ;; These are Fastmail's folders at the root of ~/Mail, as Linux
-  ;; synced it before the mail container, for a machine where no account
-  ;; takes effect and so no context is ever entered.  Where accounts do
-  ;; take effect -- every host with the mail container -- Fastmail is a
-  ;; context with its own maildir, entering mu4e enters the first
-  ;; context, and these name folders that do not exist there.
+  ;; These name Fastmail's folders as if its maildir were ~/Mail itself,
+  ;; for a machine where no account takes effect and so no context is
+  ;; ever entered.  Where accounts do take effect -- every host with the
+  ;; mail container -- Fastmail is a context with its own maildir,
+  ;; entering mu4e enters the first context, and these name folders
+  ;; that do not exist there.
   (mu4e-sent-folder   "/Sent")
   (mu4e-drafts-folder "/Drafts")
   (mu4e-trash-folder  "/Trash")
