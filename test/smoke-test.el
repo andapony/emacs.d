@@ -302,6 +302,59 @@ never runs `emacs-startup-hook'."
   (should (eq (org-link-get-parameter "mu4e" :follow) #'mu4e-org-open))
   (should (fboundp 'mu4e-org-open)))
 
+(ert-deftest rjd/smoke-mail-is-spell-checked-before-sending ()
+  "Sending a message runs jinx over it, and skips its MML tags."
+  (require 'message)
+  (require 'jinx)
+  (should (memq #'rjd/jinx-correct-before-send message-send-hook))
+  (should (memq 'message-mml (alist-get 'message-mode jinx-exclude-faces)))
+  ;; jinx's own exclusions for message-mode are kept alongside.
+  (should (memq 'message-cited-text-1
+                (alist-get 'message-mode jinx-exclude-faces))))
+
+(defun rjd/smoke-send-with-body (body)
+  "Run `message-send-hook' on a draft with BODY, and say what happened.
+Return (:prompted P :sent S): P the word the corrections opened on,
+or nil if they did not, and S if the hook let the message go.
+Quitting at the first correction stands in for the user doing so.
+Point is left at the end of the draft, where it is after writing it.
+The draft also has an attachment's MML tag and a quoted line, each
+with a misspelling that must not count.  The draft is shown in the
+selected window, as when it is sent, since the corrections recenter
+it."
+  (with-temp-buffer
+    (set-window-buffer nil (current-buffer))
+    (message-mode)
+    (jinx-mode 1)
+    (insert "To: someone@example.com\nSubject: Hello\n"
+            mail-header-separator "\n" body "\n"
+            "<#part type=\"text/plain\" filename=\"/tmp/invte.ics\">\n"
+            "> a quoted mispeling\n")
+    (font-lock-ensure)
+    (let (prompted)
+      (cl-letf (((symbol-function 'completing-read)
+                 (lambda (&rest _)
+                   (setq prompted (current-word t))
+                   (signal 'quit nil))))
+        (condition-case nil
+            (progn (run-hooks 'message-send-hook)
+                   (list :prompted prompted :sent t))
+          (quit (list :prompted prompted :sent nil)))))))
+
+(ert-deftest rjd/smoke-mail-spell-check-sends-clean-mail ()
+  "A message with nothing to correct is sent without a prompt."
+  (require 'message)
+  (require 'jinx)
+  (should (equal (rjd/smoke-send-with-body "This is a test of the spelling.")
+                 '(:prompted nil :sent t))))
+
+(ert-deftest rjd/smoke-mail-spell-check-stops-on-quit ()
+  "Misspellings open the corrections at the first, and quitting stops the send."
+  (require 'message)
+  (require 'jinx)
+  (should (equal (rjd/smoke-send-with-body "This is a tset of the speling.")
+                 '(:prompted "tset" :sent nil))))
+
 
 ;;; Capture
 

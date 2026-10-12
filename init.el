@@ -1336,13 +1336,37 @@ the abbrevs in the major mode's abbrev table rather than the global one."
                                       (downcase old) (downcase new)))
                             pairs ", ")
                  (if local "in this mode" "everywhere")))))
+
+  ;; Mail is checked once more as it goes, in case a misspelling was
+  ;; missed as it was typed.  The check covers what jinx checks in a
+  ;; message buffer: the Subject and the body, not the other headers
+  ;; or quoted text.  The send hook runs for every message buffer, in
+  ;; mu4e or out.  `jinx-correct-all' signals a `user-error' when it
+  ;; finds nothing, which would stop every clean message, so a check
+  ;; alone runs first: an error there means only that there is nothing
+  ;; to correct, and an error from the corrections themselves still
+  ;; stops the send.  jinx starts at the misspelling nearest point and
+  ;; wraps around, which for a draft sent from its last line would
+  ;; begin with the last; from the top, they come in reading order.
+  (defun rjd/jinx-correct-before-send ()
+    "Correct the message's misspellings before it is sent.
+For `message-send-hook'.  With none, the message goes as it is;
+quitting the corrections stops the send and leaves the draft open."
+    (when (and (bound-and-true-p jinx-mode)
+               (condition-case nil
+                   (progn (jinx-correct-all 'only-check) t)
+                 (user-error nil)))
+      (save-excursion
+        (goto-char (point-min))
+        (jinx-correct-all))))
   ;; The global mode covers text, prog and conf modes only, and the
   ;; agent-shell buffer is a comint one, so it is named here.  The agent's
   ;; output and past prompts are read-only, which jinx skips, so only the
   ;; prompt being written is checked.  The viewport's compose buffer is a
   ;; text mode, so the global mode already has it.
   :hook ((emacs-startup . global-jinx-mode)
-         (agent-shell-mode . jinx-mode))
+         (agent-shell-mode . jinx-mode)
+         (message-send . rjd/jinx-correct-before-send))
   :bind (("M-$" . jinx-correct)
          ("C-M-$" . jinx-languages)
          ("C-c s" . rjd/jinx-correct-and-abbrev))
@@ -1350,7 +1374,13 @@ the abbrevs in the major mode's abbrev table rather than the global one."
   ;; Named for the same reason as `ispell-dictionary': the default comes
   ;; from the locale, which a GUI Emacs launched from the Dock does not
   ;; have, and which is plain C.UTF-8 in the container.
-  (jinx-languages "en_US"))
+  (jinx-languages "en_US")
+  :config
+  ;; jinx leaves a message's MML tags in, so an attachment's file name
+  ;; was a misspelling to correct before every send.  Added to jinx's
+  ;; own list rather than setting it, which would freeze every other
+  ;; mode's entry at today's.
+  (cl-pushnew 'message-mml (alist-get 'message-mode jinx-exclude-faces)))
 
 ;;; Mail
 
