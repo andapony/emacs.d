@@ -48,12 +48,14 @@
 ;;
 ;; The prefix exists because the tools that authenticate -- mbsync,
 ;; msmtp and oama -- run in a mail container on the host, reached
-;; through `docker exec'; in development they run directly and the
-;; prefix is nil.  ADR 0001 has the reasons.  The default is chosen per
-;; machine when this file loads: the container's `docker exec -i' on a
-;; host where the setup playbook has written the mail container's
-;; configuration directory, nil inside a container (claude-dev) and on
-;; a machine without the mail container.  If the choice is wrong, set
+;; through `docker exec' or `podman exec'; in development they run
+;; directly and the prefix is nil.  ADR 0001 has the reasons.  The
+;; default is chosen per machine when this file loads: the container's
+;; `exec -i' on a host where the setup playbook has written the mail
+;; container's configuration directory, through the runtime the
+;; playbook recorded in its `runtime' file (Docker if none is
+;; recorded); nil inside a container (claude-dev) and on a machine
+;; without the mail container.  If the choice is wrong, set
 ;; `rjd/mail-command-prefix' in private.el.
 ;;
 ;; Every context sends with `rjd/mail-send-it' as
@@ -141,7 +143,7 @@
   :group 'mail)
 
 (defcustom rjd/mail-container-name "mail"
-  "The name of the mail container, as `docker exec' takes it.
+  "The name of the mail container, as `docker exec' or `podman exec' takes it.
 The setup playbook's `mail_container_name'."
   :type 'string
   :group 'rjd/mail)
@@ -160,16 +162,33 @@ Docker's and podman's, as `rjd/container-git' in init.el checks.")
 Told by any of `rjd/mail-container-marker-files' existing."
   (seq-some #'file-exists-p rjd/mail-container-marker-files))
 
+(defun rjd/mail-container-runtime ()
+  "Return the runtime that runs the mail container, such as \"podman\".
+The setup playbook records it in the file `runtime' in
+`rjd/mail-container-directory'.  Without that file it is \"docker\",
+which the Mac used before the playbook recorded anything."
+  (let* ((file (expand-file-name "runtime" rjd/mail-container-directory))
+         (recorded (and (file-readable-p file)
+                        (string-trim
+                         (with-temp-buffer
+                           (insert-file-contents file)
+                           (buffer-string))))))
+    (if (and recorded (not (string-empty-p recorded)))
+        recorded
+      "docker")))
+
 (defun rjd/mail-default-command-prefix ()
   "Return the mail command prefix this machine needs.
-On a host with the mail container, the `docker exec -i' that reaches
-it -- `-i', because msmtp reads the message on its standard input.
-nil inside a container, which is claude-dev in development, where the
-tools run directly; and nil on a machine without the mail container,
-where there is nothing to reach."
+On a host with the mail container, the `exec -i' that reaches it,
+through the runtime `rjd/mail-container-runtime' names: Docker on the
+Mac, podman on Linux.  `-i', because msmtp reads the message on its
+standard input.  nil inside a container, which is claude-dev in
+development, where the tools run directly; and nil on a machine
+without the mail container, where there is nothing to reach."
   (and (not (rjd/mail-inside-container-p))
        (file-directory-p rjd/mail-container-directory)
-       (list "docker" "exec" "-i" rjd/mail-container-name)))
+       (list (rjd/mail-container-runtime) "exec" "-i"
+             rjd/mail-container-name)))
 
 (defcustom rjd/mail-command-prefix (rjd/mail-default-command-prefix)
   "Command words put in front of every mail command, or nil.

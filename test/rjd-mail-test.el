@@ -162,7 +162,9 @@ plus, subdomain and catch-all.")
   "Run BODY on a made-up machine described by SPEC.
 SPEC is a plist: with :inside-container non-nil the machine is a
 container (its marker file exists); with :mail-container non-nil the
-host has the mail container's configuration directory."
+host has the mail container's configuration directory; with :runtime a
+string, that directory also records the runtime the playbook used, as
+the playbook writes it, with a trailing newline."
   (declare (indent 1))
   `(let* ((root (make-temp-file "rjd-mail-machine" t))
           (marker (expand-file-name "dockerenv" root))
@@ -175,18 +177,32 @@ host has the mail container's configuration directory."
              (write-region "" nil marker))
            (when (plist-get ',spec :mail-container)
              (make-directory config))
+           (when (plist-get ',spec :runtime)
+             (make-directory config t)
+             (write-region (concat (plist-get ',spec :runtime) "\n") nil
+                           (expand-file-name "runtime" config)))
            ,@body)
        (delete-directory root t))))
 
 (ert-deftest rjd/mail-default-prefix-on-a-host-with-the-mail-container ()
-  "On the host the mail commands go into the mail container."
+  "On the host the mail commands go into the mail container.
+With no runtime recorded it is Docker's, as on the Mac before the
+playbook recorded one."
   (rjd/mail-test-on-machine (:mail-container t)
     (should (equal (rjd/mail-default-command-prefix)
                    '("docker" "exec" "-i" "mail")))))
 
+(ert-deftest rjd/mail-default-prefix-uses-the-recorded-runtime ()
+  "On a podman host the mail commands go through podman."
+  (rjd/mail-test-on-machine (:runtime "podman")
+    (should (equal (rjd/mail-default-command-prefix)
+                   '("podman" "exec" "-i" "mail")))))
+
 (ert-deftest rjd/mail-default-prefix-inside-a-container ()
   "Inside claude-dev the tools run directly, whatever else is there."
   (rjd/mail-test-on-machine (:inside-container t :mail-container t)
+    (should-not (rjd/mail-default-command-prefix)))
+  (rjd/mail-test-on-machine (:inside-container t :runtime "podman")
     (should-not (rjd/mail-default-command-prefix))))
 
 (ert-deftest rjd/mail-default-prefix-on-a-host-without-the-mail-container ()
