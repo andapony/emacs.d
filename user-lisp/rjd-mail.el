@@ -12,8 +12,9 @@
 ;;
 ;; Declared accounts count only where mail can run, which
 ;; `rjd/mail-available-p' decides, for the calendar in rjd-gcal.el
-;; too: the host with the mail container, and claude-dev with the
-;; development toolchain.  Elsewhere -- leroy, bulldog -- private.el
+;; too: a host with the mail container -- the Mac, leroy, bulldog --
+;; and claude-dev with the development toolchain.  Elsewhere -- a host
+;; the setup playbook has not given the mail container -- private.el
 ;; still declares them, but `rjd/mail-active-accounts' is nil, and
 ;; Emacs starts as it does with none declared rather than running an
 ;; mbsync that is not set up for them.  `rjd/mail-enabled' overrides
@@ -219,11 +220,11 @@ nil force them on or off, from private.el."
   "Non-nil if mail can run on this machine, so accounts should count.
 The one place that decides, for mail and calendar alike.  Unless
 `rjd/mail-enabled' forces the answer, mail can run where
-`rjd/mail-command-prefix' reaches the tools -- the host with the mail
+`rjd/mail-command-prefix' reaches the tools -- a host with the mail
 container, or wherever private.el points it -- and inside a container
 with `rjd/mail-toolchain-program' on `exec-path', which is claude-dev
-during development.  Not on a host without the mail container, such
-as leroy or bulldog: any mbsync there is not set up for these accounts.
+during development.  Not on a host without the mail container: any
+mbsync there is not set up for these accounts.
 
 Elsewhere `rjd/mail-accounts' and `rjd/gcal-account' are ignored, so
 Emacs starts as it would with none declared."
@@ -680,7 +681,8 @@ otherwise waits for \\[mu4e].  Started with its BACKGROUND argument,
 it shows no window.
 
 Only where accounts are active -- see `rjd/mail-active-accounts' -- so
-leroy and bulldog, and a machine with none declared, start nothing."
+a host without the mail container, and a machine with none declared,
+start nothing."
   (when (rjd/mail-active-accounts)
     ;; An error here would stop the rest of `emacs-startup-hook'.
     (with-demoted-errors "rjd-mail: starting mu4e in the background: %S"

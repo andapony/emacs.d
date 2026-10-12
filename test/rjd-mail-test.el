@@ -206,7 +206,7 @@ playbook recorded one."
     (should-not (rjd/mail-default-command-prefix))))
 
 (ert-deftest rjd/mail-default-prefix-on-a-host-without-the-mail-container ()
-  "A machine without the mail container -- leroy, say -- has no prefix."
+  "A machine without the mail container has no prefix."
   (rjd/mail-test-on-machine ()
     (should-not (rjd/mail-default-command-prefix))))
 
@@ -257,8 +257,8 @@ playbook recorded one."
         (should-not (rjd/mail-available-p))))))
 
 (ert-deftest rjd/mail-unavailable-on-a-host-without-the-mail-container ()
-  "leroy or bulldog: no mail container, and their own mbsync, if any,
-is not set up for these accounts."
+  "A host without the mail container: its own mbsync, if any, is not
+set up for these accounts."
   (rjd/mail-test-on-machine ()
     (rjd/mail-test-with-toolchain '("mbsync")
       (let ((rjd/mail-enabled 'auto)
@@ -858,7 +858,7 @@ in the background; its argument lists are pushed onto `starts'."
 
 (defmacro rjd/mail-test-where-mail-cannot-run (&rest body)
   "Run BODY with an account declared on a machine where mail cannot run.
-The machine is leroy, say: no mail container, no prefix, not a
+The machine is a host without the mail container: no prefix, not a
 container -- decided by the machine, not forced."
   (declare (indent 0))
   `(rjd/mail-test-on-machine ()
@@ -890,7 +890,7 @@ container -- decided by the machine, not forced."
     (should (equal (rjd/mail-search-query "from:alice") "from:alice"))))
 
 (ert-deftest rjd/mail-start-syncing-where-mail-cannot-run ()
-  "leroy or bulldog: the accounts are declared, but mu4e is not started."
+  "No mail container: the accounts are declared, but mu4e is not started."
   (rjd/mail-test-where-mail-cannot-run
     (rjd/mail-test-recording-mu4e-starts
       (rjd/mail-start-syncing)
@@ -1084,7 +1084,7 @@ account's msmtp, not back to smtpmail."
       (should-not smtpmail-sent))))
 
 (ert-deftest rjd/mail-outside-mu4e-without-active-accounts-keeps-smtpmail ()
-  "Where no account is active -- leroy, bulldog -- the default stays
+  "Where no account is active -- no mail container -- the default stays
 smtpmail, with the mode on and after it is turned off."
   (rjd/mail-test-needs-mu4e)
   (rjd/mail-test-where-mail-cannot-run

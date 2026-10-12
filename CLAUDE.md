@@ -144,22 +144,27 @@ what it hooks.  Remove it once Emacs fixes the builder upstream.
 
 Every mail command (mbsync, msmtp, oama) is built with
 `rjd/mail-command`, which puts `rjd/mail-command-prefix` in front: nil
-inside `claude-dev`, the mail container's `docker exec -i mail` on the
-host.  The default is chosen when the package loads, by
+inside `claude-dev`, the mail container's `exec -i mail` on a host --
+the Mac, leroy or bulldog, each of which runs its own mail container.
+The default is chosen when the package loads, by
 `rjd/mail-default-command-prefix`: the container if Emacs is not
 itself in one and the `setup` playbook has written
 `~/.config/mail-container/` (the container's configuration, outside
 `~/projects`, so no agent can edit what runs beside the tokens); nil
-otherwise.
+otherwise.  The runtime is the one the playbook recorded in
+`~/.config/mail-container/runtime` -- Docker on the Mac, rootless
+podman on Linux -- and Docker if that file is missing.
 
 Declared accounts, and the calendar account, take effect only where
 `rjd/mail-available-p` says mail can run: where the prefix is set, or
 inside a container with `mbsync` on `exec-path` (`claude-dev` with
-the dev toolchain).  On leroy or bulldog Emacs starts as if none were
-declared; `rjd/mail-enabled` forces it either way.  `private.el` only
-declares data; the decision stays here, under test.  On the Mac, mu
-and mu4e come from Homebrew, and mu4e's form puts Homebrew's
-site-lisp on `load-path`.  ERT tests: `test/rjd-mail-test.el`.
+the dev toolchain).  On a machine without the mail container Emacs
+starts as if none were declared; `rjd/mail-enabled` forces it either
+way.  `private.el` only declares data; the decision stays here, under
+test.  On the Mac, mu and mu4e come from Homebrew, and mu4e's form
+puts Homebrew's site-lisp on `load-path`; on Linux and in `claude-dev`
+both are built from source at a shared pin under `~/.local/mu`, which
+mu4e's form puts first.  ERT tests: `test/rjd-mail-test.el`.
 
 ## Calendar
 

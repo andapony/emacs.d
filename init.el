@@ -1450,17 +1450,18 @@ quitting the corrections stops the send and leaves the draft open."
   (mu4e-compose-context-policy 'ask)
 
   ;; Folders outside every context.  Each context sets its account's.
-  ;; These are Fastmail's as leroy and bulldog sync it, at the root of
-  ;; ~/Mail, where no account takes effect and so no context is ever
-  ;; entered.  Where accounts do take effect -- the Mac -- Fastmail is
-  ;; a context with its own maildir, entering mu4e enters the first
+  ;; These are Fastmail's folders at the root of ~/Mail, as Linux
+  ;; synced it before the mail container, for a machine where no account
+  ;; takes effect and so no context is ever entered.  Where accounts do
+  ;; take effect -- every host with the mail container -- Fastmail is a
+  ;; context with its own maildir, entering mu4e enters the first
   ;; context, and these name folders that do not exist there.
   (mu4e-sent-folder   "/Sent")
   (mu4e-drafts-folder "/Drafts")
   (mu4e-trash-folder  "/Trash")
   (mu4e-refile-folder "/Archive")
 
-  ;; Where no account is active -- leroy, bulldog -- sending goes out
+  ;; Where no account is active -- no mail container -- sending goes out
   ;; over SMTP; the server, port, stream type and the identity to send
   ;; as are all set in private.el.  Without that file mu4e still reads
   ;; mail, and sending is simply unconfigured.  Where accounts are
@@ -1508,7 +1509,7 @@ quitting the corrections stops the send and leaves the draft open."
   ;; Each account's Spam and Trash folders are left out of these, as of
   ;; every search that does not name them, by `rjd/mail-mode', through
   ;; `mu4e-query-rewrite-function'.  These queries leave out only the
-  ;; Spam of Fastmail at the root of ~/Mail, for leroy and bulldog, where
+  ;; Spam of a Fastmail synced at the root of ~/Mail, on a machine where
   ;; no account takes effect and so nothing is rewritten.  Elsewhere the
   ;; clause matches no folder, and costs nothing.
   (mu4e-bookmarks

@@ -74,10 +74,10 @@ org-gcal waits on the promise, so the error reaches its fetch."
 
 (defmacro rjd/gcal-test-on-machine (mail-can-run &rest body)
   "Run BODY with an account declared, on a machine where mail can run or not.
-MAIL-CAN-RUN non-nil is the iMac: the mail container's prefix is set.
-nil is leroy, say: no prefix, and not inside a container.  Fetching is
-stubbed to record into the list `fetches', and the calendar file is a
-temporary one.  `rjd/gcal-mode' is on for BODY."
+MAIL-CAN-RUN non-nil is a host: the mail container's prefix is set.
+nil is a machine without the mail container: no prefix, and not inside
+a container.  Fetching is stubbed to record into the list `fetches',
+and the calendar file is a temporary one.  `rjd/gcal-mode' is on for BODY."
   (declare (indent 1))
   `(let* ((dir (make-temp-file "rjd-gcal-test" t))
           (rjd/gcal-file (file-name-concat dir "gcal.org"))
