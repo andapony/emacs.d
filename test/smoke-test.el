@@ -201,6 +201,14 @@ lets timers run, as returning to the command loop would; see
 
 ;;; Mail
 
+(ert-deftest rjd/smoke-mu4e-uses-the-source-built-mu ()
+  "Where mu is built under ~/.local/mu, mu4e runs that mu.
+Its elisp is the one `:load-path' puts first, and the two must match,
+whatever other mu is on PATH.  Skipped where there is no such build."
+  (skip-unless (file-exists-p "~/.local/mu/bin/mu"))
+  (require 'mu4e)
+  (should (equal mu4e-mu-binary (expand-file-name "~/.local/mu/bin/mu"))))
+
 (ert-deftest rjd/smoke-mu4e-goes-through-rjd-mail ()
   "Loading mu4e turns on `rjd/mail-mode', and mail is fetched through it.
 Skipped where mu4e is not installed.  Whether accounts are declared

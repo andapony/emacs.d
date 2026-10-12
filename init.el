@@ -1403,13 +1403,13 @@ quitting the corrections stops the send and leaves the draft open."
 ;; there is no maildir setting here.
 (use-package mu4e
   :defer t
-  ;; claude-dev builds mu, and with it mu4e, under ~/.local/mu.  The Mac
-  ;; gets both from Homebrew (the setup playbook installs `mu'), whose
-  ;; site-lisp /Applications/Emacs.app does not search; the mu4e elisp
-  ;; must be the one Homebrew shipped with that `mu', so it is named
-  ;; here, Apple silicon's prefix first.  Mint's apt package puts mu4e
-  ;; where Emacs finds it already.  A missing directory on `load-path'
-  ;; is harmless.
+  ;; claude-dev and the Linux hosts build mu, and with it mu4e, under
+  ;; ~/.local/mu; `mu4e-mu-binary', first under `:custom', runs the mu
+  ;; built with that elisp.  The Mac gets both from Homebrew (the setup
+  ;; playbook installs `mu'), whose site-lisp /Applications/Emacs.app
+  ;; does not search; the mu4e elisp must be the one Homebrew shipped
+  ;; with that `mu', so it is named here, Apple silicon's prefix first.
+  ;; A missing directory on `load-path' is harmless.
   :load-path ("~/.local/mu/share/emacs/site-lisp/mu4e"
               "/opt/homebrew/share/emacs/site-lisp/mu/mu4e"
               "/usr/local/share/emacs/site-lisp/mu/mu4e")
@@ -1432,6 +1432,12 @@ quitting the corrections stops the send and leaves the draft open."
   (when (get 'mu4e-user-agent 'composefunc)
     (setq mail-user-agent 'mu4e-user-agent))
   :custom
+  ;; The mu built with the first `:load-path' entry's elisp, wherever it
+  ;; exists, ahead of any other mu on PATH; elsewhere mu4e's own
+  ;; default, the mu on PATH.
+  (mu4e-mu-binary (if (file-exists-p "~/.local/mu/bin/mu")
+                      (expand-file-name "~/.local/mu/bin/mu")
+                    (executable-find "mu")))
   (mu4e-update-interval 300)
   ;; On entering mu4e, take the first context rather than asking: mail
   ;; is read in the declared accounts, so the order private.el declares
