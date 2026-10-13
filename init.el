@@ -1502,6 +1502,11 @@ quitting the corrections stops the send and leaves the draft open."
   (shr-use-fonts  nil)
   (shr-use-colors nil)
 
+  ;; Show the text/plain alternative, not the HTML one.  This is also
+  ;; what a reply quotes: mu4e cites a fresh rendering of the message,
+  ;; not the view buffer, so `h' there never reaches the reply.
+  (mm-discouraged-alternatives '("text/html" "text/richtext"))
+
   ;; Rename files when moving so mbsync can track moves correctly
   (mu4e-change-filenames-when-moving t)
 
