@@ -926,6 +926,15 @@ into another calendar as copies -- see `rjd/gcal-file-p'."
       (completion-preview-insert)))
   :custom
   (completion-preview-minimum-symbol-length 2)
+  ;; Emacs 31's default with `text-mode' added, so prose gets no preview:
+  ;; that covers every mode derived from it, mail composition (message-mode
+  ;; and mu4e's compose) included.
+  (global-completion-preview-modes
+   '((not text-mode
+          archive-mode calc-mode compilation-mode diff-mode dired-mode
+          image-mode minibuffer-mode minibuffer-inactive-mode
+          org-agenda-mode special-mode wdired-mode)
+     t))
   :bind (:map completion-preview-active-mode-map
               ;; TAB opens "*Completions*" whenever there is a choice to
               ;; make, and never commits, so it reads the same whether or

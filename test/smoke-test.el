@@ -321,6 +321,18 @@ load mu4e.  Skipped where mu4e is not installed."
   (should (memq 'message-cited-text-1
                 (alist-get 'message-mode jinx-exclude-faces))))
 
+(ert-deftest rjd/smoke-no-completion-preview-in-prose ()
+  "The completion preview is on in code but off in text-mode buffers.
+Mail composition derives from text-mode, so it is covered too."
+  (should global-completion-preview-mode)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (should completion-preview-mode))
+  (dolist (mode '(text-mode message-mode))
+    (with-temp-buffer
+      (funcall mode)
+      (should-not completion-preview-mode))))
+
 (defun rjd/smoke-send-with-body (body)
   "Run `message-send-hook' on a draft with BODY, and say what happened.
 Return (:prompted P :sent S): P the word the corrections opened on,
