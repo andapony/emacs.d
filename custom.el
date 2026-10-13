@@ -7,10 +7,11 @@
  '(package-selected-packages
    '(agent-shell consult csv csv-mode denote diminish elfeed
 		 exec-path-from-shell flycheck flycheck-golangci-lint
-		 flycheck-hledger gptel ledger-mode magit marginalia
-		 mermaid-mode ob-mermaid orderless org-chronicle
-		 org-modern org-reading-list org-web-tools ripgrep
-		 spacious-padding vertico yasnippet)))
+		 flycheck-hledger gptel jinx ledger-mode magit
+		 marginalia mermaid-mode ob-mermaid orderless
+		 org-chronicle org-modern org-reading-list
+		 org-web-tools ripgrep spacious-padding vertico
+		 yasnippet)))
 
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
