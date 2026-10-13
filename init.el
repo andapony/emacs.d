@@ -1513,6 +1513,24 @@ quitting the corrections stops the send and leaves the draft open."
   ;; Don't keep message buffers around
   (message-kill-buffer-on-exit t)
 
+  ;; Write paragraphs unwrapped and send them as format=flowed, rather
+  ;; than message-mode's hard wrapping at `message-fill-column'.  mu4e's
+  ;; compose turns auto-fill off, wraps on screen with visual-line-mode,
+  ;; and keeps a newline only where RET was typed; sending breaks each
+  ;; paragraph at `fill-flowed-encode-column' with soft breaks, which a
+  ;; flowed reader (Apple Mail, Thunderbird, mu4e) rejoins and any other
+  ;; shows as the 66-column text that hard wrapping sent.  Only mu4e's
+  ;; compose does this; `message-mail' called directly still hard-wraps.
+  ;;
+  ;; Gmail and Outlook ignore format=flowed, and keep the breaks.  If
+  ;; mail to them should reflow too, the alternative is to send each
+  ;; paragraph as one long line: set this back to nil, set
+  ;; `message-fill-column' to nil so message-mode never turns auto-fill
+  ;; on, and add `visual-line-mode' to `message-mode-hook' to wrap it on
+  ;; screen.  The cost is very long lines for anyone reading in a
+  ;; terminal client or a plain-text archive.
+  (mu4e-compose-format-flowed t)
+
   ;; Each account's Spam and Trash folders are left out of these, as of
   ;; every search that does not name them, by `rjd/mail-mode', through
   ;; `mu4e-query-rewrite-function'.  These queries leave out only the

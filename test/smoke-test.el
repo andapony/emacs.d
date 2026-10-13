@@ -321,6 +321,18 @@ load mu4e.  Skipped where mu4e is not installed."
   (should (memq 'message-cited-text-1
                 (alist-get 'message-mode jinx-exclude-faces))))
 
+(ert-deftest rjd/smoke-mu4e-composes-format-flowed ()
+  "mu4e's compose wraps on screen and sends format=flowed, unfilled.
+Skipped where mu4e is not installed."
+  (skip-unless (locate-library "mu4e"))
+  (require 'mu4e)
+  (with-temp-buffer
+    (mu4e-compose-mode)
+    (should-not auto-fill-function)
+    (should visual-line-mode)
+    (should use-hard-newlines)
+    (should mml-enable-flowed)))
+
 (ert-deftest rjd/smoke-no-completion-preview-in-prose ()
   "The completion preview is on in code but off in text-mode buffers.
 Mail composition derives from text-mode, so it is covered too."
