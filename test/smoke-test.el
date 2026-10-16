@@ -151,6 +151,18 @@ with it.  Nil if git cannot say."
   (should-not rjd/smoke-load-warnings))
 
 
+;;; Frames
+
+(ert-deftest rjd/smoke-startup-makes-two-half-frames ()
+  "A graphical session starts as two full-height frames side by side.
+The initial frame takes the left half, and `window-setup-hook' makes
+the right; batch Emacs runs neither, so only the setup is checked."
+  (should (equal (alist-get 'fullscreen initial-frame-alist) 'fullheight))
+  (should (equal (alist-get 'width initial-frame-alist) 0.5))
+  (should (equal (alist-get 'left initial-frame-alist) 0.0))
+  (should (memq #'rjd/make-right-hand-frame window-setup-hook)))
+
+
 ;;; Org agenda files
 
 (ert-deftest rjd/smoke-org-agenda-files-are-init-el-s ()

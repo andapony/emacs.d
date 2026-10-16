@@ -106,15 +106,37 @@
 
 ;;; Frames, theme and fonts
 
+;; A graphical session starts as two full-height frames side by side, each
+;; half the workarea wide.  The float `width' is a fraction of the workarea,
+;; and the float `left' is a position ratio: 0.0 flushes a frame to the left
+;; edge, 1.0 to the right.  `frame-resize-pixelwise' lets the halves meet
+;; exactly instead of each being rounded down to a whole column.
+;;
+;; The second frame is made from `window-setup-hook', once the initial one
+;; exists.  Under --daemon or in a terminal there is no graphical frame by
+;; then, so nothing is made.
+(defconst rjd/half-frame-parameters
+  '((top . 0) (width . 0.5) (fullscreen . fullheight))
+  "Frame parameters shared by the two frames a graphical session starts with.")
+
 (use-package emacs
+  :preface
+  (defun rjd/make-right-hand-frame ()
+    "Make a full-height frame on the right half of the workarea."
+    (when (display-graphic-p)
+      (make-frame (cons '(left . 1.0) rjd/half-frame-parameters))))
   :custom
   (inhibit-startup-screen t)
   (menu-bar-mode nil)
   (tool-bar-mode nil)
   (scroll-bar-mode nil)
   (visible-bell t)
+  (frame-resize-pixelwise t)
   :init
-  (add-to-list 'initial-frame-alist '(fullscreen . maximized)))
+  (setq initial-frame-alist
+        (append (cons '(left . 0.0) rjd/half-frame-parameters)
+                initial-frame-alist))
+  (add-hook 'window-setup-hook #'rjd/make-right-hand-frame))
 
 (use-package emacs
   :init
