@@ -393,11 +393,19 @@ everywhere else."
   ;; project's, and from a file it carries the file over as context.  So
   ;; resolve the root here -- C-x p p sets its override buffer-locally --
   ;; and call it from a blank buffer standing in that root.
+  ;;
+  ;; The override must then go.  agent-shell finds a project's shells by
+  ;; asking each shell buffer for its project, and the override sits in
+  ;; whichever buffer C-x p p was run from: run from another project's
+  ;; shell, that shell would claim the chosen project and be returned in
+  ;; place of the chosen project's own.  project.el clears it once the
+  ;; command returns; it is cleared here before the lookup instead.
   (defun rjd/project-agent-shell (&optional arg)
     "Start or switch to an agent shell at the current project's root.
 ARG is passed to `agent-shell': \\[universal-argument] forces a new shell."
     (interactive "P")
     (let ((root (project-root (project-current t))))
+      (kill-local-variable 'project-current-directory-override)
       (with-temp-buffer
         (setq default-directory root)
         (agent-shell arg))))
@@ -1650,6 +1658,23 @@ whatever another machine has synced in since."
   (defun rjd/agent-shell-static-completions ()
     "Stop \"*Completions*\" refiltering as this buffer changes."
     (setq-local completion-eager-update nil))
+
+  ;; ── A short mode line ────────────────────────────────────────────
+  ;; The header already carries the agent, model, effort, session mode,
+  ;; project, context, budget and version.  Of the rest of the default
+  ;; mode line, nothing means anything in a chat buffer -- position,
+  ;; modified flag, coding system, process status, and the major and
+  ;; minor mode lighters -- so only the buffer's name is kept, to tell
+  ;; shells apart, and `mode-line-misc-info', which carries
+  ;; `global-mode-string' (an org clock, say), so the indicators every
+  ;; other buffer shows stay visible here too.
+  (defun rjd/agent-shell-short-mode-line ()
+    "Reduce this buffer's mode line to its name and the global indicators."
+    (setq-local mode-line-format
+                '("%e" mode-line-front-space
+                  mode-line-buffer-identification "  "
+                  mode-line-misc-info
+                  mode-line-end-spaces)))
   :custom
   ;; ── Container execution ──────────────────────────────────────────
   ;; -i is required: acp.el speaks JSON-RPC over the adapter's stdin.
@@ -1718,6 +1743,7 @@ whatever another machine has synced in since."
 
   (add-hook 'agent-shell-mode-hook #'rjd/agent-shell-drop-comint-completion)
   (add-hook 'agent-shell-mode-hook #'rjd/agent-shell-static-completions)
+  (add-hook 'agent-shell-mode-hook #'rjd/agent-shell-short-mode-line)
 
   ;; ── Ergonomics (optional, but suited to your complaints) ─────────
   ;; RET inserts a newline; explicit send. Multi-line prompts stop
