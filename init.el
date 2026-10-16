@@ -393,11 +393,19 @@ everywhere else."
   ;; project's, and from a file it carries the file over as context.  So
   ;; resolve the root here -- C-x p p sets its override buffer-locally --
   ;; and call it from a blank buffer standing in that root.
+  ;;
+  ;; The override must then go.  agent-shell finds a project's shells by
+  ;; asking each shell buffer for its project, and the override sits in
+  ;; whichever buffer C-x p p was run from: run from another project's
+  ;; shell, that shell would claim the chosen project and be returned in
+  ;; place of the chosen project's own.  project.el clears it once the
+  ;; command returns; it is cleared here before the lookup instead.
   (defun rjd/project-agent-shell (&optional arg)
     "Start or switch to an agent shell at the current project's root.
 ARG is passed to `agent-shell': \\[universal-argument] forces a new shell."
     (interactive "P")
     (let ((root (project-root (project-current t))))
+      (kill-local-variable 'project-current-directory-override)
       (with-temp-buffer
         (setq default-directory root)
         (agent-shell arg))))
