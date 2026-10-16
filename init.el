@@ -1455,7 +1455,17 @@ quitting the corrections stops the send and leaves the draft open."
   ;; Following an org link to a message must work before mu4e has
   ;; loaded; loading mu4e loads mu4e-org, which defines this.
   :commands mu4e-org-open
-  :bind ("C-c M" . mu4e)
+  :preface
+  (defun rjd/mu4e-bury-or-quit (&optional quit)
+    "Bury the mu4e main view, or with prefix argument QUIT, quit mu4e.
+The reverse of `mu4e-quit', which quits unless given a prefix.  Mail
+goes on syncing in the background only while mu4e runs, so leaving
+the main view should not usually stop it."
+    (interactive "P")
+    (mu4e-quit (not quit)))
+  :bind (("C-c M" . mu4e)
+         :map mu4e-main-mode-map
+         ("q" . rjd/mu4e-bury-or-quit))
   :init
   (add-hook 'emacs-startup-hook #'rjd/mail-start-syncing)
   ;; All mail is written in mu4e: `compose-mail' -- C-x m, a mailto:

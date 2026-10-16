@@ -345,6 +345,18 @@ Skipped where mu4e is not installed."
     (should use-hard-newlines)
     (should mml-enable-flowed)))
 
+(ert-deftest rjd/smoke-mu4e-main-view-q-buries ()
+  "q in mu4e's main view buries it; only C-u q quits mu4e.
+Skipped where mu4e is not installed."
+  (skip-unless (locate-library "mu4e"))
+  (require 'mu4e)
+  (should (eq (keymap-lookup mu4e-main-mode-map "q")
+              #'rjd/mu4e-bury-or-quit))
+  (cl-letf (((symbol-function 'mu4e-quit)
+             (lambda (&optional bury) (if bury 'bury 'quit))))
+    (should (eq (rjd/mu4e-bury-or-quit) 'bury))
+    (should (eq (rjd/mu4e-bury-or-quit '(4)) 'quit))))
+
 (ert-deftest rjd/smoke-no-completion-preview-in-prose ()
   "The completion preview is on in code but off in text-mode buffers.
 Mail composition derives from text-mode, so it is covered too."
