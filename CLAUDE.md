@@ -190,6 +190,25 @@ hooks, and `rjd/gcal-mode` is opt-in, enabled from org-agenda's form in
 calls org-gcal's sync, only its fetch.  ERT tests:
 `test/rjd-gcal-test.el`.
 
+iCloud calendars reach the agenda through `rjd-icloud` (user-lisp),
+which fetches each calendar named in `private.el`'s
+`rjd/icloud-calendars`, by display name, over CalDAV into
+`icloud-SLUG.org`, rewriting the file whole after each successful
+fetch.  It only ever sends PROPFIND and REPORT: the app-specific
+password, from auth-source under `caldav.icloud.com`, could write, so
+read-only rests on the code.  Recurrences are expanded by iCloud, not
+here, and iCloud sends each time in its event's TZID with no
+VTIMEZONE, which `rjd-icloud` resolves from the system's zone database.
+**If the iCloud calendars disappear from the agenda, or their times
+shift, those two iCloud behaviours are the first place to look**;
+`test/icloud-probe.sh`, run on the host, shows what iCloud now sends,
+and `rjd-icloud.el`'s commentary has the rest.  Nothing is fetched
+inside a container, so no agent's Emacs holds the password, and a
+timer's fetch never prompts for a passphrase.  `rjd/icloud-mode` is
+opt-in, enabled from org-agenda's form beside `rjd/gcal-mode`.  ERT
+tests: `test/rjd-icloud-test.el`, against sanitised recordings in
+`test/fixtures/icloud/`; ADR-0002 has the design.
+
 ## Git through the container
 
 On the host, Magit and vc run git through claude-container's

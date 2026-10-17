@@ -59,7 +59,11 @@ named zone, never assumed to be UTC.
 **One disposable calendar file per calendar.**  Each calendar is
 written to its own calendar file under `~/org-agenda/calendars/`,
 labelled with its display name by `#+CATEGORY:` and dated by a
-`#+FETCHED:` line.  The file is rewritten whole after a complete,
+`#+FETCHED:` line.  The file is named `icloud-SLUG.org`, the slug being
+the display name in lower case with apostrophes dropped and every other
+run of characters but letters and digits made one `-`
+(`Marie/Errands & Appt's` is `icloud-marie-errands-appts.org`); two
+calendars whose slugs collide are both refused, with a message.  The file is rewritten whole after a complete,
 successful fetch of that calendar, and never edited by hand: notes
 about an event belong in the user's own files.  A failed fetch leaves
 the last good file and shows one message per run of failures.  An
@@ -84,6 +88,13 @@ timer fetch never prompts: if the password would need a passphrase,
 that run is skipped, and only a fetch started by opening the agenda
 may ask.  Each machine has its own app-specific password, labelled
 with the machine's name.
+
+**A calendar fed from org is never fetched.**  The account holds a
+calendar that beorg writes; fetched, its events would come back into
+the agenda as copies of org's own entries, the loop ADR-0001 keeps the
+Google calendar out of the export for.  It is simply not named in
+`private.el`; the same goes for any calendar that subscribes to the
+agenda export.
 
 **Where it runs.**  On any machine that has an account in `private.el`
 and a password in auth-source, mail or no mail -- but never inside a

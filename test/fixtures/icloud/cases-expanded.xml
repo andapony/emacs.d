@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- Made by hand, in the shape of iCloud's expanded REPORT response
+     (probe-expanded.xml): no VTIMEZONE, no VERSION or PRODID.  One
+     response per case; the last escapes its calendar-data as entities
+     rather than CDATA. -->
+<multistatus xmlns="DAV:">
+  <response>
+    <href>/1234567890/calendars/PROBE-CALENDAR/utc.ics</href>
+    <propstat><prop><calendar-data xmlns="urn:ietf:params:xml:ns:caldav"><![CDATA[BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:utc
+DTSTAMP:20261017T000000Z
+SUMMARY:Dentist
+LOCATION:12 Main St\, Springfield
+DESCRIPTION:Bring the form.\n* not a heading\n\nLast line.
+DTSTART:20261021T163000Z
+DTEND:20261021T171500Z
+END:VEVENT
+END:VCALENDAR
+]]></calendar-data></prop><status>HTTP/1.1 200 OK</status></propstat>
+  </response>
+  <response>
+    <href>/1234567890/calendars/PROBE-CALENDAR/allday.ics</href>
+    <propstat><prop><calendar-data xmlns="urn:ietf:params:xml:ns:caldav"><![CDATA[BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:allday
+DTSTAMP:20261017T000000Z
+SUMMARY:Bin day
+DTSTART;VALUE=DATE:20261022
+DTEND;VALUE=DATE:20261023
+TRANSP:TRANSPARENT
+END:VEVENT
+END:VCALENDAR
+]]></calendar-data></prop><status>HTTP/1.1 200 OK</status></propstat>
+  </response>
+  <response>
+    <href>/1234567890/calendars/PROBE-CALENDAR/multiday.ics</href>
+    <propstat><prop><calendar-data xmlns="urn:ietf:params:xml:ns:caldav"><![CDATA[BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:multiday
+DTSTAMP:20261017T000000Z
+SUMMARY:Long weekend
+DTSTART;VALUE=DATE:20261120
+DTEND;VALUE=DATE:20261123
+END:VEVENT
+END:VCALENDAR
+]]></calendar-data></prop><status>HTTP/1.1 200 OK</status></propstat>
+  </response>
+  <response>
+    <href>/1234567890/calendars/PROBE-CALENDAR/cancelled.ics</href>
+    <propstat><prop><calendar-data xmlns="urn:ietf:params:xml:ns:caldav"><![CDATA[BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:cancelled
+DTSTAMP:20261017T000000Z
+SUMMARY:Cancelled meeting
+STATUS:CANCELLED
+DTSTART;TZID=America/Los_Angeles:20261023T090000
+DTEND;TZID=America/Los_Angeles:20261023T100000
+END:VEVENT
+END:VCALENDAR
+]]></calendar-data></prop><status>HTTP/1.1 200 OK</status></propstat>
+  </response>
+  <response>
+    <href>/1234567890/calendars/PROBE-CALENDAR/declined.ics</href>
+    <propstat><prop><calendar-data xmlns="urn:ietf:params:xml:ns:caldav"><![CDATA[BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:declined
+DTSTAMP:20261017T000000Z
+SUMMARY:Declined party
+ORGANIZER:mailto:friend@example.org
+ATTENDEE;PARTSTAT=ACCEPTED:mailto:friend@example.org
+ATTENDEE;PARTSTAT=DECLINED:mailto:User@Example.com
+DTSTART;TZID=America/Los_Angeles:20261024T190000
+DTEND;TZID=America/Los_Angeles:20261024T220000
+END:VEVENT
+END:VCALENDAR
+]]></calendar-data></prop><status>HTTP/1.1 200 OK</status></propstat>
+  </response>
+  <response>
+    <href>/1234567890/calendars/PROBE-CALENDAR/accepted.ics</href>
+    <propstat><prop><calendar-data xmlns="urn:ietf:params:xml:ns:caldav"><![CDATA[BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:accepted
+DTSTAMP:20261017T000000Z
+SUMMARY:Accepted dinner
+ORGANIZER:mailto:friend@example.org
+ATTENDEE;PARTSTAT=DECLINED:mailto:someone-else@example.org
+ATTENDEE;PARTSTAT=ACCEPTED:mailto:user@example.com
+DTSTART;TZID=America/Los_Angeles:20261025T230000
+DTEND;TZID=America/Los_Angeles:20261026T003000
+END:VEVENT
+END:VCALENDAR
+]]></calendar-data></prop><status>HTTP/1.1 200 OK</status></propstat>
+  </response>
+  <response>
+    <href>/1234567890/calendars/PROBE-CALENDAR/floating.ics</href>
+    <propstat><prop><calendar-data xmlns="urn:ietf:params:xml:ns:caldav"><![CDATA[BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:floating
+DTSTAMP:20261017T000000Z
+SUMMARY:Floating alarm
+DTSTART:20261027T070000
+END:VEVENT
+END:VCALENDAR
+]]></calendar-data></prop><status>HTTP/1.1 200 OK</status></propstat>
+  </response>
+  <response>
+    <href>/1234567890/calendars/PROBE-CALENDAR/windows-zone.ics</href>
+    <propstat><prop><calendar-data xmlns="urn:ietf:params:xml:ns:caldav">BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:windows-zone
+DTSTAMP:20261017T000000Z
+SUMMARY:Call &amp; review
+DTSTART;TZID=Pacific Standard Time:20261028T080000
+DTEND;TZID=Pacific Standard Time:20261028T083000
+END:VEVENT
+END:VCALENDAR
+</calendar-data></prop><status>HTTP/1.1 200 OK</status></propstat>
+  </response>
+</multistatus>

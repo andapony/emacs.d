@@ -1,0 +1,449 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<multistatus xmlns="DAV:">
+
+    
+    
+    <response xmlns="DAV:">
+        <href>/1234567890/calendars/</href>
+            
+                <propstat>
+                    <prop>
+                        
+                            
+                                <displayname xmlns="DAV:">Example User</displayname>
+                            
+                        
+                            
+                                <resourcetype xmlns="DAV:"><collection/></resourcetype>
+                            
+                        
+                    </prop>
+                    <status>HTTP/1.1 200 OK</status>
+                </propstat>
+                
+            
+    </response>
+    
+    
+        
+        <response xmlns="DAV:">
+            <href>/1234567890/calendars/CALENDAR-01/</href>
+            
+                <propstat>
+                    <prop>
+                        
+                            
+                                <displayname xmlns="DAV:">Shared 2018</displayname>
+                            
+                        
+                            
+                                <resourcetype xmlns="DAV:"><collection/><calendar xmlns="urn:ietf:params:xml:ns:caldav"/><shared-owner xmlns="http://calendarserver.org/ns/"/></resourcetype>
+                            
+                        
+                    </prop>
+                    <status>HTTP/1.1 200 OK</status>
+                </propstat>
+                
+            
+        </response>
+        
+        <response xmlns="DAV:">
+            <href>/1234567890/calendars/CALENDAR-02/</href>
+            
+                <propstat>
+                    <prop>
+                        
+                            
+                                <displayname xmlns="DAV:">beorg</displayname>
+                            
+                        
+                            
+                                <resourcetype xmlns="DAV:"><collection/><calendar xmlns="urn:ietf:params:xml:ns:caldav"/></resourcetype>
+                            
+                        
+                    </prop>
+                    <status>HTTP/1.1 200 OK</status>
+                </propstat>
+                
+            
+        </response>
+        
+        <response xmlns="DAV:">
+            <href>/1234567890/calendars/CALENDAR-03/</href>
+            
+                <propstat>
+                    <prop>
+                        
+                            
+                                <displayname xmlns="DAV:">Routine</displayname>
+                            
+                        
+                            
+                                <resourcetype xmlns="DAV:"><collection/><calendar xmlns="urn:ietf:params:xml:ns:caldav"/></resourcetype>
+                            
+                        
+                    </prop>
+                    <status>HTTP/1.1 200 OK</status>
+                </propstat>
+                
+            
+        </response>
+        
+        <response xmlns="DAV:">
+            <href>/1234567890/calendars/PROBE-CALENDAR/</href>
+            
+                <propstat>
+                    <prop>
+                        
+                            
+                                <displayname xmlns="DAV:">Probe</displayname>
+                            
+                        
+                            
+                                <resourcetype xmlns="DAV:"><collection/><calendar xmlns="urn:ietf:params:xml:ns:caldav"/></resourcetype>
+                            
+                        
+                    </prop>
+                    <status>HTTP/1.1 200 OK</status>
+                </propstat>
+                
+            
+        </response>
+        
+        <response xmlns="DAV:">
+            <href>/1234567890/calendars/CALENDAR-04/</href>
+            
+                <propstat>
+                    <prop>
+                        
+                            
+                                <displayname xmlns="DAV:">Museums</displayname>
+                            
+                        
+                            
+                                <resourcetype xmlns="DAV:"><collection/><calendar xmlns="urn:ietf:params:xml:ns:caldav"/></resourcetype>
+                            
+                        
+                    </prop>
+                    <status>HTTP/1.1 200 OK</status>
+                </propstat>
+                
+            
+        </response>
+        
+        <response xmlns="DAV:">
+            <href>/1234567890/calendars/CALENDAR-05/</href>
+            
+                <propstat>
+                    <prop>
+                        
+                            
+                                <displayname xmlns="DAV:">Shared 2015</displayname>
+                            
+                        
+                            
+                                <resourcetype xmlns="DAV:"><collection/><calendar xmlns="urn:ietf:params:xml:ns:caldav"/><shared-owner xmlns="http://calendarserver.org/ns/"/></resourcetype>
+                            
+                        
+                    </prop>
+                    <status>HTTP/1.1 200 OK</status>
+                </propstat>
+                
+            
+        </response>
+        
+        <response xmlns="DAV:">
+            <href>/1234567890/calendars/CALENDAR-06/</href>
+            
+                <propstat>
+                    <prop>
+                        
+                            
+                                <displayname xmlns="DAV:">Home</displayname>
+                            
+                        
+                            
+                                <resourcetype xmlns="DAV:"><collection/><calendar xmlns="urn:ietf:params:xml:ns:caldav"/><shared-owner xmlns="http://calendarserver.org/ns/"/></resourcetype>
+                            
+                        
+                    </prop>
+                    <status>HTTP/1.1 200 OK</status>
+                </propstat>
+                
+            
+        </response>
+        
+        <response xmlns="DAV:">
+            <href>/1234567890/calendars/CALENDAR-07/</href>
+            
+                <propstat>
+                    <prop>
+                        
+                            
+                                <displayname xmlns="DAV:">Events</displayname>
+                            
+                        
+                            
+                                <resourcetype xmlns="DAV:"><collection/><calendar xmlns="urn:ietf:params:xml:ns:caldav"/></resourcetype>
+                            
+                        
+                    </prop>
+                    <status>HTTP/1.1 200 OK</status>
+                </propstat>
+                
+            
+        </response>
+        
+        <response xmlns="DAV:">
+            <href>/1234567890/calendars/CALENDAR-08/</href>
+            
+                <propstat>
+                    <prop>
+                        
+                            
+                                <displayname xmlns="DAV:">Anniversaries</displayname>
+                            
+                        
+                            
+                                <resourcetype xmlns="DAV:"><collection/><calendar xmlns="urn:ietf:params:xml:ns:caldav"/></resourcetype>
+                            
+                        
+                    </prop>
+                    <status>HTTP/1.1 200 OK</status>
+                </propstat>
+                
+            
+        </response>
+        
+        <response xmlns="DAV:">
+            <href>/1234567890/calendars/CALENDAR-09/</href>
+            
+                <propstat>
+                    <prop>
+                        
+                            
+                                <displayname xmlns="DAV:">Reminders ⚠️</displayname>
+                            
+                        
+                            
+                                <resourcetype xmlns="DAV:"><collection/><calendar xmlns="urn:ietf:params:xml:ns:caldav"/></resourcetype>
+                            
+                        
+                    </prop>
+                    <status>HTTP/1.1 200 OK</status>
+                </propstat>
+                
+            
+        </response>
+        
+        <response xmlns="DAV:">
+            <href>/1234567890/calendars/inbox/</href>
+            
+                <propstat>
+                    <prop>
+                        
+                            
+                            
+                        
+                            
+                                <resourcetype xmlns="DAV:"><collection/><schedule-inbox xmlns="urn:ietf:params:xml:ns:caldav"/></resourcetype>
+                            
+                        
+                    </prop>
+                    <status>HTTP/1.1 200 OK</status>
+                </propstat>
+                
+                    <propstat>
+                        <prop>
+                            
+                                
+                                    <displayname xmlns="DAV:"/>
+                                
+                            
+                                
+                            
+                        </prop>
+                        <status>HTTP/1.1 404 Not Found</status>
+                    </propstat>
+                
+            
+        </response>
+        
+        <response xmlns="DAV:">
+            <href>/1234567890/calendars/notification/</href>
+            
+                <propstat>
+                    <prop>
+                        
+                            
+                            
+                        
+                            
+                                <resourcetype xmlns="DAV:"><collection/><notification xmlns="http://calendarserver.org/ns/"/></resourcetype>
+                            
+                        
+                    </prop>
+                    <status>HTTP/1.1 200 OK</status>
+                </propstat>
+                
+                    <propstat>
+                        <prop>
+                            
+                                
+                                    <displayname xmlns="DAV:"/>
+                                
+                            
+                                
+                            
+                        </prop>
+                        <status>HTTP/1.1 404 Not Found</status>
+                    </propstat>
+                
+            
+        </response>
+        
+        <response xmlns="DAV:">
+            <href>/1234567890/calendars/outbox/</href>
+            
+                <propstat>
+                    <prop>
+                        
+                            
+                            
+                        
+                            
+                                <resourcetype xmlns="DAV:"><collection/><schedule-outbox xmlns="urn:ietf:params:xml:ns:caldav"/></resourcetype>
+                            
+                        
+                    </prop>
+                    <status>HTTP/1.1 200 OK</status>
+                </propstat>
+                
+                    <propstat>
+                        <prop>
+                            
+                                
+                                    <displayname xmlns="DAV:"/>
+                                
+                            
+                                
+                            
+                        </prop>
+                        <status>HTTP/1.1 404 Not Found</status>
+                    </propstat>
+                
+            
+        </response>
+        
+        <response xmlns="DAV:">
+            <href>/1234567890/calendars/CALENDAR-10/</href>
+            
+                <propstat>
+                    <prop>
+                        
+                            
+                                <displayname xmlns="DAV:">Partner/Work</displayname>
+                            
+                        
+                            
+                                <resourcetype xmlns="DAV:"><collection/><calendar xmlns="urn:ietf:params:xml:ns:caldav"/><shared xmlns="http://calendarserver.org/ns/"/></resourcetype>
+                            
+                        
+                    </prop>
+                    <status>HTTP/1.1 200 OK</status>
+                </propstat>
+                
+            
+        </response>
+        
+        <response xmlns="DAV:">
+            <href>/1234567890/calendars/CALENDAR-11/</href>
+            
+                <propstat>
+                    <prop>
+                        
+                            
+                                <displayname xmlns="DAV:">Partner/Special</displayname>
+                            
+                        
+                            
+                                <resourcetype xmlns="DAV:"><collection/><calendar xmlns="urn:ietf:params:xml:ns:caldav"/><shared xmlns="http://calendarserver.org/ns/"/></resourcetype>
+                            
+                        
+                    </prop>
+                    <status>HTTP/1.1 200 OK</status>
+                </propstat>
+                
+            
+        </response>
+        
+        <response xmlns="DAV:">
+            <href>/1234567890/calendars/CALENDAR-12/</href>
+            
+                <propstat>
+                    <prop>
+                        
+                            
+                                <displayname xmlns="DAV:">Trips!</displayname>
+                            
+                        
+                            
+                                <resourcetype xmlns="DAV:"><collection/><calendar xmlns="urn:ietf:params:xml:ns:caldav"/><shared xmlns="http://calendarserver.org/ns/"/></resourcetype>
+                            
+                        
+                    </prop>
+                    <status>HTTP/1.1 200 OK</status>
+                </propstat>
+                
+            
+        </response>
+        
+        <response xmlns="DAV:">
+            <href>/1234567890/calendars/CALENDAR-13/</href>
+            
+                <propstat>
+                    <prop>
+                        
+                            
+                                <displayname xmlns="DAV:">Club</displayname>
+                            
+                        
+                            
+                                <resourcetype xmlns="DAV:"><collection/><calendar xmlns="urn:ietf:params:xml:ns:caldav"/><shared xmlns="http://calendarserver.org/ns/"/></resourcetype>
+                            
+                        
+                    </prop>
+                    <status>HTTP/1.1 200 OK</status>
+                </propstat>
+                
+            
+        </response>
+        
+        <response xmlns="DAV:">
+            <href>/1234567890/calendars/CALENDAR-14/</href>
+            
+                <propstat>
+                    <prop>
+                        
+                            
+                                <displayname xmlns="DAV:">Partner/Errands &amp; Appt&apos;s</displayname>
+                            
+                        
+                            
+                                <resourcetype xmlns="DAV:"><collection/><calendar xmlns="urn:ietf:params:xml:ns:caldav"/><shared xmlns="http://calendarserver.org/ns/"/></resourcetype>
+                            
+                        
+                    </prop>
+                    <status>HTTP/1.1 200 OK</status>
+                </propstat>
+                
+            
+        </response>
+        
+    
+    
+    
+    
+
+
+</multistatus>

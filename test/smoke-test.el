@@ -536,6 +536,27 @@ another calendar through the exported .ics."
             (should-not (string-search "Meeting from Google" ics))))
       (delete-directory dir t))))
 
+
+;;; iCloud calendars
+
+(ert-deftest rjd/smoke-icloud-is-on-once-the-agenda-loads ()
+  "The iCloud calendars are fetched into the calendar directory.
+The mode is turned on, through its autoload, once the agenda loads, and
+the package is not loaded before then."
+  (should-not (memq 'rjd-icloud rjd/smoke-features-after-init))
+  (require 'org-agenda)
+  (should rjd/icloud-mode)
+  (should (equal rjd/icloud-directory rjd/calendar-directory)))
+
+(ert-deftest rjd/smoke-icloud-fetches-nothing-in-a-container ()
+  "Inside a container no calendar is fetched, whatever private.el says."
+  (require 'rjd-icloud)
+  (let ((rjd/icloud-account "user@example.com")
+        (rjd/icloud-calendars '("Home"))
+        (rjd/icloud-container-marker-files (list (locate-library "rjd-icloud"))))
+    (should (eq rjd/icloud-enabled 'auto))
+    (should-not (rjd/icloud-active-p))))
+
 (ert-run-tests-batch-and-exit)
 
 ;;; smoke-test.el ends here

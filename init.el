@@ -719,10 +719,12 @@ traversing corrupts its iteration."
              ((org-agenda-files '("~/org-agenda/inbox.org"))
               (org-agenda-overriding-header "Inbox (process me)")))))))
   :config
-  ;; Google Calendar in the agenda, from rjd-gcal in user-lisp/ -- see
-  ;; ";;; Calendar" below.  Turned on here, as the agenda loads, so the
-  ;; package is not loaded before anything needs it.
-  (rjd/gcal-mode 1))
+  ;; Google and iCloud calendars in the agenda, from rjd-gcal and
+  ;; rjd-icloud in user-lisp/ -- see ";;; Calendar" below.  Turned on
+  ;; here, as the agenda loads, so neither package is loaded before
+  ;; anything needs it.
+  (rjd/gcal-mode 1)
+  (rjd/icloud-mode 1))
 
 (use-package org-capture
   :defer t
@@ -849,6 +851,20 @@ copies."
   :custom
   (rjd/gcal-file (file-name-concat rjd/calendar-directory
                                    "gcal-gmail-personal.org")))
+
+;; iCloud calendars, read-only, in the agenda: rjd-icloud, a local
+;; package in user-lisp/, fetches each over CalDAV into its own file in
+;; the calendar directory.  docs/adr/0002-icloud-calendars-caldav-fetch.md
+;; has the reasons.  The account and the calendars' names are set in
+;; private.el, as `rjd/icloud-account' and `rjd/icloud-calendars', and
+;; the app-specific password is in auth-source; without them nothing is
+;; fetched, and inside a container nothing is either.  If the calendars
+;; disappear from the agenda, rjd-icloud.el's commentary has what iCloud
+;; does that it relies on, and turning the mode off is the way round.
+(use-package rjd-icloud
+  :defer t
+  :custom
+  (rjd/icloud-directory rjd/calendar-directory))
 
 ;;; Appearance
 
