@@ -170,12 +170,6 @@ fetch redoes it, so without this each fetch would set off the next.")
 (declare-function org-gcal-fetch "org-gcal")
 (declare-function org-agenda-redo "org-agenda")
 
-;;;###autoload
-(defun rjd/gcal-file-p (file)
-  "Non-nil if FILE is the calendar file, `rjd/gcal-file'."
-  (and rjd/gcal-file
-       (string= (expand-file-name file) (expand-file-name rjd/gcal-file))))
-
 (defun rjd/gcal--ensure-category ()
   "Put the `#+CATEGORY:' line at the top of the calendar file, if it lacks one.
 The file must exist.  A buffer visiting it is edited and saved, so that

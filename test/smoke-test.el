@@ -174,7 +174,7 @@ A value saved in custom.el would win over init.el's `:custom'."
                    "~/org-agenda/projects.org"
                    "~/org-agenda/areas.org"
                    "~/org-agenda/someday.org"
-                   "~/org-agenda/gcal-gmail-personal.org"))))
+                   "~/org-agenda/calendars/"))))
 
 (ert-deftest rjd/smoke-org-agenda-file-commands-do-not-save ()
   "Removing an agenda file changes the session but saves nothing.
@@ -478,33 +478,52 @@ The link org stores to the file is left out, as it always was."
                    (concat "* Cetos\n\n** TODO \n  [2026-10-10 Sat 09:30]\n"
                            "  [[mu4e:msgid:rjd9@test.invalid][Budget for Q4]]\n\n")))))
 
+(ert-deftest rjd/smoke-calendar-directory-is-made-beside-the-agenda ()
+  "The calendar directory is made where the agenda's directory exists.
+`org-agenda-files' lists it, and the agenda takes a missing directory
+for a missing file and asks about it every time it opens."
+  (require 'org)
+  (let* ((dir (make-temp-file "rjd-smoke-calendars" t))
+         (rjd/calendar-directory (file-name-concat dir "calendars/")))
+    (unwind-protect
+        (progn
+          (rjd/ensure-calendar-directory)
+          (should (file-directory-p rjd/calendar-directory)))
+      (delete-directory dir t)))
+  (let ((rjd/calendar-directory "/nonexistent-rjd-smoke/calendars/"))
+    (rjd/ensure-calendar-directory)
+    (should-not (file-exists-p rjd/calendar-directory))))
+
 
 ;;; Google Calendar
 
 (ert-deftest rjd/smoke-gcal-fetches-into-the-agenda-s-calendar-file ()
-  "The calendar is fetched into the file the agenda lists, and is on.
+  "The calendar is fetched into the calendar directory, and is on.
 It is turned on, through its autoload, once the agenda loads, and is
 not loaded before then."
   (should-not (memq 'rjd-gcal rjd/smoke-features-after-init))
   (require 'org-agenda)
   (should rjd/gcal-mode)
-  (should (equal rjd/gcal-file "~/org-agenda/gcal-gmail-personal.org")))
+  (should (equal rjd/gcal-file
+                 "~/org-agenda/calendars/gcal-gmail-personal.org"))
+  (should (string-prefix-p (expand-file-name rjd/calendar-directory)
+                           (expand-file-name rjd/gcal-file))))
 
-(ert-deftest rjd/smoke-gcal-file-is-not-in-the-ics-export ()
-  "The combined iCalendar export leaves the calendar file out.
-Its events came from Google, and would otherwise go back into another
-calendar through the exported .ics."
+(ert-deftest rjd/smoke-calendar-files-are-not-in-the-ics-export ()
+  "The combined iCalendar export leaves every calendar file out.
+Their events came from calendars, and would otherwise go back into
+another calendar through the exported .ics."
   (require 'ox-icalendar)
-  (require 'rjd-gcal)
   (let* ((dir (make-temp-file "rjd-smoke-ics" t))
          (tasks (file-name-concat dir "tasks.org"))
-         (calendar (file-name-concat dir "calendar.org"))
-         (rjd/gcal-file calendar)
-         (org-agenda-files (list tasks calendar))
+         (rjd/calendar-directory (file-name-concat dir "calendars/"))
+         (calendar (file-name-concat rjd/calendar-directory "calendar.org"))
+         (org-agenda-files (list tasks rjd/calendar-directory))
          (org-icalendar-combined-agenda-file
           (file-name-concat dir "agenda.ics")))
     (unwind-protect
         (progn
+          (make-directory rjd/calendar-directory)
           (write-region "* Meeting from org\n<2026-10-12 Mon 10:00>\n"
                         nil tasks nil 'silent)
           (write-region "* Meeting from Google\n<2026-10-13 Tue 10:00>\n"

@@ -532,6 +532,14 @@ convention."
 
 ;;; Org
 
+;; Where every calendar file lives: the org files that external calendars
+;; are fetched into, one per calendar, each rewritten by its fetch.
+;; `org-agenda-files' lists the directory once, so a new calendar needs no
+;; change here, and the .ics export below leaves the whole directory out.
+;; ADR-0002 has the reasons.
+(defconst rjd/calendar-directory "~/org-agenda/calendars/"
+  "The directory of calendar files, fetched from external calendars.")
+
 (use-package org
   :preface
   (defun rjd/org-capture-preview-p ()
@@ -542,6 +550,17 @@ The buffer is internal and visits no file.  The buffer a capture is actually
 typed into is a separate indirect buffer named CAPTURE-<file>, which this
 deliberately does not match."
     (string-prefix-p "*Capture*" (buffer-name)))
+
+  (defun rjd/ensure-calendar-directory ()
+    "Make `rjd/calendar-directory' if its parent exists and it does not.
+`org-agenda-files' lists it, and the agenda takes a missing directory for
+a missing file, which it asks about every time it opens.  A machine
+without the agenda's own directory is left alone."
+    (let ((dir (expand-file-name rjd/calendar-directory)))
+      (when (and (not (file-exists-p dir))
+                 (file-directory-p (file-name-directory
+                                    (directory-file-name dir))))
+        (make-directory dir))))
 
   (defun rjd/org-mode-setup ()
     "Enable visual-line mode for org buffers."
@@ -616,13 +635,14 @@ traversing corrupts its iteration."
   ;; commands for editing it are kept from saving into custom.el, which
   ;; would override it -- see `rjd/org-agenda-files-for-session'.
   ;;
-  ;; The last file is the Google Calendar, fetched by rjd-gcal (see
-  ;; ";;; Calendar" below), whose `rjd/gcal-file' must name the same file.
-  (org-agenda-files '("~/org-agenda/inbox.org"
+  ;; The last entry is `rjd/calendar-directory', every .org file in it:
+  ;; the calendars, such as Google's, fetched by rjd-gcal (see
+  ;; ";;; Calendar" below).
+  (org-agenda-files `("~/org-agenda/inbox.org"
                       "~/org-agenda/projects.org"
                       "~/org-agenda/areas.org"
                       "~/org-agenda/someday.org"
-                      "~/org-agenda/gcal-gmail-personal.org"))
+                      ,rjd/calendar-directory))
   (org-directory "~/org-agenda")
   (org-ellipsis "…")
   (org-hide-emphasis-markers t)
@@ -652,6 +672,7 @@ traversing corrupts its iteration."
      ("WAITING"   . warning)
      ("CANCELLED" . shadow)))
   :config
+  (rjd/ensure-calendar-directory)
   (add-hook 'org-mode-hook #'rjd/org-mode-setup)
   (add-hook 'org-mode-hook #'rjd/org-plain-capture-preview)
   (advice-add 'org-store-new-agenda-file-list
@@ -756,13 +777,16 @@ buffer, is left out, as it was before this existed."
 (use-package ox-icalendar
   :defer t
   :preface
-  (defun rjd/icalendar-combine-without-gcal (combine &rest args)
-    "Run COMBINE with ARGS, leaving the Google Calendar file out.
+  (defun rjd/icalendar-combine-without-calendars (combine &rest args)
+    "Run COMBINE with ARGS, leaving out every calendar file.
 Advice around `org-icalendar-combine-agenda-files', which COMBINE is.
-That file's events came from Google, and exported they would come back
-into another calendar as copies -- see `rjd/gcal-file-p'."
+The files in `rjd/calendar-directory' hold events fetched from
+calendars, and exported they would come back into another calendar as
+copies."
     (let ((org-agenda-files
-           (seq-remove #'rjd/gcal-file-p (org-agenda-files t))))
+           (seq-remove (lambda (file)
+                         (file-in-directory-p file rjd/calendar-directory))
+                       (org-agenda-files t))))
       (apply combine args)))
   :custom
   (org-icalendar-combined-agenda-file "~/Sync/org/agenda.ics")
@@ -771,7 +795,7 @@ into another calendar as copies -- see `rjd/gcal-file-p'."
   (org-icalendar-use-scheduled '(event-if-todo))
   :config
   (advice-add 'org-icalendar-combine-agenda-files
-              :around #'rjd/icalendar-combine-without-gcal))
+              :around #'rjd/icalendar-combine-without-calendars))
 
 ;; Loaded from vendor/, which the setup repo symlinks into place; tolerate
 ;; its absence so the rest of this file still loads on a bare checkout.
@@ -785,9 +809,9 @@ into another calendar as copies -- see `rjd/gcal-file-p'."
 ;; one org file, with a token from oama, and is never asked to sync.
 ;; docs/adr/0001-mail-and-calendar-architecture.md has the reasons.  The
 ;; account is set in private.el, as `rjd/gcal-account'; without it
-;; nothing is fetched.  The file is the last of `org-agenda-files', and
-;; is kept out of the .ics export above and out of org-sync, whose file
-;; set is the setup repo's.
+;; nothing is fetched.  The file is in `rjd/calendar-directory', so
+;; the agenda reads it and the .ics export above leaves it out; org-sync,
+;; whose file set is the setup repo's, never names it.
 (use-package org-gcal
   :ensure t
   :defer t
@@ -823,7 +847,8 @@ into another calendar as copies -- see `rjd/gcal-file-p'."
 (use-package rjd-gcal
   :defer t
   :custom
-  (rjd/gcal-file "~/org-agenda/gcal-gmail-personal.org"))
+  (rjd/gcal-file (file-name-concat rjd/calendar-directory
+                                   "gcal-gmail-personal.org")))
 
 ;;; Appearance
 

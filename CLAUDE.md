@@ -168,9 +168,16 @@ site-lisp on `load-path`.  ERT tests: `test/rjd-mail-test.el`.
 
 ## Calendar
 
+Every external calendar is fetched, read-only, into its own calendar
+file in `rjd/calendar-directory`, `~/org-agenda/calendars/`.
+`org-agenda-files` lists the directory, so the agenda reads every file
+in it, and the combined `.ics` export leaves the whole directory out
+(advice in `init.el`), so no fetched event loops back into a calendar.
+org-sync, whose file set is the `setup` repo's, never names these files.
+
 Google Calendar reaches the agenda through `rjd-gcal` (user-lisp), which
-has org-gcal fetch one account's calendar, read-only, into
-`~/org-agenda/gcal-gmail-personal.org`.  The account is set in
+has org-gcal fetch one account's calendar into
+`~/org-agenda/calendars/gcal-gmail-personal.org`.  The account is set in
 `private.el` as `rjd/gcal-account`; without it, or where mail cannot
 run (see Mail), nothing is fetched and there is no timer.  The
 token comes from oama, through `rjd/mail-command`, by `:around` advice
@@ -180,9 +187,8 @@ updating.  **If the calendar disappears from the agenda, that advice is
 the first place to look**; `rjd-gcal.el`'s commentary names what it
 hooks, and `rjd/gcal-mode` is opt-in, enabled from org-agenda's form in
 `init.el`, so nothing loads before the agenda does.  Nothing
-calls org-gcal's sync, only its fetch.  The file is kept out of the
-combined `.ics` export (advice in `init.el`) and out of org-sync, whose
-file set is the `setup` repo's.  ERT tests: `test/rjd-gcal-test.el`.
+calls org-gcal's sync, only its fetch.  ERT tests:
+`test/rjd-gcal-test.el`.
 
 ## Git through the container
 
