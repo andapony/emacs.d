@@ -35,6 +35,17 @@
 ;; So everything here goes through the enter and leave functions, never
 ;; `vars'.
 ;;
+;; Trashing and refiling go to the folder of the account whose maildir
+;; holds the message, not the current context's: mu4e asks for the
+;; folder with the message, but chooses a context for it only among
+;; `vars', so each context's folder, and the mode's global one, is a
+;; function of the message, `rjd/mail-message-folder'.  Otherwise `d'
+;; on a Fastmail message in the Gmail context would move it into
+;; Gmail's Trash, and outside every context into the global /Trash,
+;; which is Fastmail's only at the root of ~/Mail, on leroy and
+;; bulldog.  A message in no account's maildir goes where the context,
+;; or the global setting the mode replaced, says.
+;;
 ;; A context stays entered while mu4e runs, and after it quits, so the
 ;; globals are then the account's.  A message buffer that is not mu4e's
 ;; -- `message-mail', say -- therefore gets the default identity,
@@ -120,6 +131,8 @@
 (defvar mu4e-contexts)
 (defvar mu4e-get-mail-command)
 (defvar mu4e-query-rewrite-function)
+(defvar mu4e-trash-folder)
+(defvar mu4e-refile-folder)
 (defvar message-send-mail-function)
 (defvar message-user-fqdn)
 (declare-function mu4e-root-maildir "mu4e-server")
@@ -327,6 +340,29 @@ machine without the tools behaves as if none were declared."
           (plist-get (or (plist-get account :folders) rjd/mail-gmail-folders)
                      folder)))
 
+(defun rjd/mail--in-maildir-p (account msg)
+  "Non-nil if MSG, a mu4e message plist, is in ACCOUNT's maildir."
+  (and msg
+       (string-prefix-p (concat (plist-get account :maildir) "/")
+                        (or (plist-get msg :maildir) ""))))
+
+(defun rjd/mail-message-folder (msg folder default)
+  "The maildir of FOLDER for MSG, a mu4e message plist or nil.
+FOLDER is a key of `rjd/mail-gmail-folders'.  That is, FOLDER of the
+active account whose maildir holds MSG; failing one, DEFAULT, a folder
+or a function of MSG as `mu4e-trash-folder' may be."
+  (if-let* ((account (seq-find (lambda (account)
+                                 (rjd/mail--in-maildir-p account msg))
+                               (rjd/mail-active-accounts))))
+      (rjd/mail--folder account folder)
+    (if (functionp default) (funcall default msg) default)))
+
+(defun rjd/mail--message-folder-function (folder default)
+  "A function of a message giving its FOLDER, or else DEFAULT.
+For `mu4e-trash-folder' and `mu4e-refile-folder'; see
+`rjd/mail-message-folder'."
+  (lambda (msg) (rjd/mail-message-folder msg folder default)))
+
 (defun rjd/mail--msmtp-account (account)
   "The msmtp account that sends ACCOUNT's mail."
   (or (plist-get account :msmtp-account) (plist-get account :name)))
@@ -351,8 +387,12 @@ so a Message-ID names that rather than this machine."
     (message-send-mail-function . rjd/mail-send-it)
     (mu4e-sent-folder . ,(rjd/mail--folder account :sent))
     (mu4e-drafts-folder . ,(rjd/mail--folder account :drafts))
-    (mu4e-trash-folder . ,(rjd/mail--folder account :trash))
-    (mu4e-refile-folder . ,(rjd/mail--folder account :refile))
+    (mu4e-trash-folder
+     . ,(rjd/mail--message-folder-function
+         :trash (rjd/mail--folder account :trash)))
+    (mu4e-refile-folder
+     . ,(rjd/mail--message-folder-function
+         :refile (rjd/mail--folder account :refile)))
     (mu4e-sent-messages-behavior
      . ,(or (plist-get account :sent-messages-behavior) 'delete))
     (mu4e-trash-without-flag
@@ -417,13 +457,12 @@ matches; either way regardless of case."
   "A mu4e match function for ACCOUNT.
 A message matches when it is in the account's maildir, or addressed to
 one of the account's addresses in To or Cc; see `rjd/mail--address-p'."
-  (let ((prefix (concat (plist-get account :maildir) "/")))
-    (lambda (msg)
-      (when msg
-        (or (string-prefix-p prefix (or (plist-get msg :maildir) ""))
-            (seq-some (lambda (contact)
-                        (rjd/mail--address-p account (plist-get contact :email)))
-                      (append (plist-get msg :to) (plist-get msg :cc))))))))
+  (lambda (msg)
+    (when msg
+      (or (rjd/mail--in-maildir-p account msg)
+          (seq-some (lambda (contact)
+                      (rjd/mail--address-p account (plist-get contact :email)))
+                    (append (plist-get msg :to) (plist-get msg :cc)))))))
 
 (defun rjd/mail-contexts (&optional accounts)
   "Return a mu4e context for each of ACCOUNTS.
@@ -670,6 +709,12 @@ leroy and bulldog, and a machine with none declared, start nothing."
 
 ;;; Mode
 
+(defvar rjd/mail--fallback-folders nil
+  "The `mu4e-trash-folder' and `mu4e-refile-folder' the mode replaced.
+An alist of (VARIABLE . VALUE), or nil when the mode replaced neither.
+Where accounts are active the mode makes each global folder a function
+of the message, and a message in no account's maildir gets these.")
+
 (defvar rjd/mail--before-mode nil
   "`mu4e-contexts', `mu4e-get-mail-command' and
 `mu4e-query-rewrite-function' before the mode was on.")
@@ -680,12 +725,14 @@ leroy and bulldog, and a machine with none declared, start nothing."
 Also fetch mail for them through `rjd/mail-get-mail-command', leave
 their Spam and Trash out of every search that does not ask for them,
 through `rjd/mail-search-query', and keep message buffers outside mu4e
-on the global default identity.  With accounts active, make
+on the global default identity.  With accounts active, trash and refile
+a message into its own account's folders, whatever the context; see
+`rjd/mail-message-folder'.  With accounts active, make
 `rjd/mail-send-it' the global `message-send-mail-function', so mail
 from an account's address goes through its msmtp wherever it was
 written; it hands any other From to the function it replaced.
 Turning the mode off puts back the contexts, fetch command, query
-rewriting and sending function it replaced, and the global defaults
+rewriting, sending function and folders it replaced, and the global defaults
 if a context was entered.
 
 While on, each mu4e index first moves the accounts' unread mail that
@@ -710,6 +757,15 @@ replies; see `rjd/mail--reply-as-one-attendee'."
                    (not rjd/mail--fallback-send-function))
           (setq rjd/mail--fallback-send-function message-send-mail-function
                 message-send-mail-function #'rjd/mail-send-it))
+        (when (and (rjd/mail-active-accounts)
+                   (not rjd/mail--fallback-folders))
+          (setq rjd/mail--fallback-folders
+                `((mu4e-trash-folder . ,mu4e-trash-folder)
+                  (mu4e-refile-folder . ,mu4e-refile-folder))
+                mu4e-trash-folder (rjd/mail--message-folder-function
+                                   :trash mu4e-trash-folder)
+                mu4e-refile-folder (rjd/mail--message-folder-function
+                                    :refile mu4e-refile-folder)))
         (add-hook 'message-mode-hook #'rjd/mail--restore-default-identity)
         (advice-add 'mu4e-update-index :before
                     #'rjd/mail--move-flagged-new-before-index)
@@ -728,7 +784,10 @@ replies; see `rjd/mail--reply-as-one-attendee'."
             rjd/mail--before-mode nil))
     (when rjd/mail--fallback-send-function
       (setq message-send-mail-function rjd/mail--fallback-send-function
-            rjd/mail--fallback-send-function nil))))
+            rjd/mail--fallback-send-function nil))
+    (dolist (cell rjd/mail--fallback-folders)
+      (set (car cell) (cdr cell)))
+    (setq rjd/mail--fallback-folders nil)))
 
 (provide 'rjd-mail)
 ;;; rjd-mail.el ends here

@@ -317,8 +317,8 @@ is not set up for these accounts."
     (should (equal message-user-fqdn "example.com"))
     (should (equal mu4e-sent-folder "/gmail-test/sent"))
     (should (equal mu4e-drafts-folder "/gmail-test/drafts"))
-    (should (equal mu4e-trash-folder "/gmail-test/trash"))
-    (should (equal mu4e-refile-folder "/gmail-test/all"))
+    (should (equal (funcall mu4e-trash-folder nil) "/gmail-test/trash"))
+    (should (equal (funcall mu4e-refile-folder nil) "/gmail-test/all"))
     (should (eq mu4e-sent-messages-behavior 'delete))
     ;; Trashed mail must reach Gmail's Trash: with the trashed flag,
     ;; mbsync would expunge it instead, and Gmail would only archive it.
@@ -331,7 +331,7 @@ is not set up for these accounts."
      (car (rjd/mail-contexts (list rjd/mail-test-other))))
     (should (equal user-mail-address "other@example.org"))
     (should (equal mu4e-sent-folder "/other/Sent"))
-    (should (equal mu4e-refile-folder "/other/Archive"))
+    (should (equal (funcall mu4e-refile-folder nil) "/other/Archive"))
     (should (eq mu4e-sent-messages-behavior 'sent))
     (should (eq mu4e-trash-without-flag nil))))
 
@@ -383,8 +383,8 @@ folders and sent behaviour, not the other's."
       (should (eq message-send-mail-function #'rjd/mail-send-it))
       (should (equal mu4e-sent-folder "/fastmail-test/Sent"))
       (should (equal mu4e-drafts-folder "/fastmail-test/Drafts"))
-      (should (equal mu4e-trash-folder "/fastmail-test/Trash"))
-      (should (equal mu4e-refile-folder "/fastmail-test/Archive"))
+      (should (equal (funcall mu4e-trash-folder nil) "/fastmail-test/Trash"))
+      (should (equal (funcall mu4e-refile-folder nil) "/fastmail-test/Archive"))
       (should (eq mu4e-sent-messages-behavior 'sent))
       (should (eq mu4e-trash-without-flag t))
       (rjd/mail-test-leave fastmail)
@@ -392,8 +392,8 @@ folders and sent behaviour, not the other's."
       (should (equal user-mail-address "someone@example.com"))
       (should (equal mu4e-sent-folder "/gmail-test/sent"))
       (should (equal mu4e-drafts-folder "/gmail-test/drafts"))
-      (should (equal mu4e-trash-folder "/gmail-test/trash"))
-      (should (equal mu4e-refile-folder "/gmail-test/all"))
+      (should (equal (funcall mu4e-trash-folder nil) "/gmail-test/trash"))
+      (should (equal (funcall mu4e-refile-folder nil) "/gmail-test/all"))
       (should (eq mu4e-sent-messages-behavior 'delete))
       (rjd/mail-test-leave gmail))))
 
@@ -454,6 +454,94 @@ context, in To or Cc, whatever its case; a near miss does not."
                        "someone@example.com"))
       (should-not (funcall matches `(:maildir "/elsewhere"
                                      :to ((:email ,address))))))))
+
+
+;;; Trashing and refiling
+
+(defmacro rjd/mail-test-with-gmail-and-fastmail-mode (&rest body)
+  "Run BODY with Gmail and Fastmail declared and `rjd/mail-mode' on."
+  (declare (indent 0))
+  `(rjd/mail-test-with-fastmail-defaults
+     (let ((rjd/mail-accounts (list rjd/mail-test-gmail rjd/mail-test-fastmail))
+           (mu4e-contexts nil)
+           (mu4e-get-mail-command "true")
+           (rjd/mail-mode nil)
+           (rjd/mail--before-mode nil)
+           (rjd/mail--fallback-folders nil))
+       (rjd/mail-mode 1)
+       (unwind-protect
+           (progn ,@body)
+         (rjd/mail-mode -1)))))
+
+(ert-deftest rjd/mail-trash-goes-to-the-message-s-account ()
+  "In either context, a message is trashed and refiled into the folders
+of the account whose maildir holds it, not the context's."
+  (rjd/mail-test-needs-mu4e)
+  (rjd/mail-test-with-gmail-and-fastmail-mode
+    (dolist (name '("gmail-test" "fastmail-test"))
+      (let ((context (rjd/mail-test-context name mu4e-contexts)))
+        (rjd/mail-test-enter context)
+        (should (equal (funcall mu4e-trash-folder
+                                '(:maildir "/fastmail-test/INBOX"))
+                       "/fastmail-test/Trash"))
+        (should (equal (funcall mu4e-refile-folder
+                                '(:maildir "/fastmail-test/INBOX"))
+                       "/fastmail-test/Archive"))
+        (should (equal (funcall mu4e-trash-folder
+                                '(:maildir "/gmail-test/inbox"))
+                       "/gmail-test/trash"))
+        (should (equal (funcall mu4e-refile-folder
+                                '(:maildir "/gmail-test/inbox"))
+                       "/gmail-test/all"))
+        (rjd/mail-test-leave context)))))
+
+(ert-deftest rjd/mail-trash-follows-the-maildir-not-the-recipient ()
+  "A Fastmail message to the Gmail address matches the Gmail context,
+but is still trashed into Fastmail's Trash, where mbsync keeps it."
+  (rjd/mail-test-needs-mu4e)
+  (rjd/mail-test-with-gmail-and-fastmail-mode
+    (let ((msg '(:maildir "/fastmail-test/INBOX"
+                 :to ((:email "someone@example.com")))))
+      (should (equal (mu4e-context-name (mu4e-context-determine msg))
+                     "gmail-test"))
+      (rjd/mail-test-enter (rjd/mail-test-context "gmail-test" mu4e-contexts))
+      (should (equal (funcall mu4e-trash-folder msg) "/fastmail-test/Trash")))))
+
+(ert-deftest rjd/mail-trash-outside-every-account-s-maildir ()
+  "A message in no account's maildir, or none, goes to the context's
+folders in a context, and to the global ones outside every context."
+  (rjd/mail-test-needs-mu4e)
+  (rjd/mail-test-with-gmail-and-fastmail-mode
+    (dolist (msg '(nil (:maildir "/elsewhere/INBOX")
+                       (:maildir "/gmail-test-other/inbox")))
+      (should (equal (funcall mu4e-trash-folder msg) "/Trash"))
+      (should (equal (funcall mu4e-refile-folder msg) "/Archive"))
+      (let ((gmail (rjd/mail-test-context "gmail-test" mu4e-contexts)))
+        (rjd/mail-test-enter gmail)
+        (should (equal (funcall mu4e-trash-folder msg) "/gmail-test/trash"))
+        (rjd/mail-test-leave gmail)))))
+
+(ert-deftest rjd/mail-trash-outside-every-context-goes-to-the-account ()
+  "With no context entered, a message is still trashed into its own
+account's folder, not the global /Trash, which is Fastmail's only at
+the root of ~/Mail."
+  (rjd/mail-test-needs-mu4e)
+  (rjd/mail-test-with-gmail-and-fastmail-mode
+    (should (equal (funcall mu4e-trash-folder '(:maildir "/fastmail-test/INBOX"))
+                   "/fastmail-test/Trash"))
+    (should (equal (funcall mu4e-refile-folder '(:maildir "/gmail-test/inbox"))
+                   "/gmail-test/all"))))
+
+(ert-deftest rjd/mail-mode-restores-the-folders ()
+  "Turning the mode off, from inside a context too, puts the global
+folders back as they were."
+  (rjd/mail-test-needs-mu4e)
+  (rjd/mail-test-with-gmail-and-fastmail-mode
+    (rjd/mail-test-enter (car mu4e-contexts))
+    (rjd/mail-mode -1)
+    (should (equal mu4e-trash-folder "/Trash"))
+    (should (equal mu4e-refile-folder "/Archive"))
+    (should-not rjd/mail--fallback-folders)))
 
 
 ;;; Sending
@@ -779,6 +867,8 @@ in the background; its argument lists are pushed onto `starts'."
         (mu4e-contexts nil)
         (mu4e-get-mail-command "true")
         (mu4e-query-rewrite-function 'identity)
+        (mu4e-trash-folder "/Trash")
+        (mu4e-refile-folder "/Archive")
         (rjd/mail-mode nil)
         (rjd/mail--before-mode nil))
     (rjd/mail-mode 1)
@@ -798,6 +888,8 @@ in the background; its argument lists are pushed onto `starts'."
          (rjd/mail-accounts (list rjd/mail-test-gmail))
          (mu4e-contexts nil)
          (mu4e-get-mail-command "true")
+         (mu4e-trash-folder "/Trash")
+         (mu4e-refile-folder "/Archive")
          (rjd/mail-mode nil)
          (rjd/mail--before-mode nil)
          indexed-files)
@@ -864,6 +956,20 @@ container -- decided by the machine, not forced."
             (should (equal mu4e-contexts nil))
             (should (equal (funcall mu4e-get-mail-command) "true")))
         (rjd/mail-mode -1)))))
+
+(ert-deftest rjd/mail-mode-where-mail-cannot-run-leaves-the-folders ()
+  "With no account active, the global folders stay plain folders."
+  (rjd/mail-test-where-mail-cannot-run
+    (rjd/mail-test-with-fastmail-defaults
+      (let ((mu4e-contexts nil)
+            (mu4e-get-mail-command "true")
+            (rjd/mail-mode nil)
+            (rjd/mail--before-mode nil)
+            (rjd/mail--fallback-folders nil))
+        (rjd/mail-mode 1)
+        (unwind-protect
+            (should (equal mu4e-trash-folder "/Trash"))
+          (rjd/mail-mode -1))))))
 
 (ert-deftest rjd/mail-without-junk-where-mail-cannot-run ()
   (rjd/mail-test-where-mail-cannot-run

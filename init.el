@@ -1497,7 +1497,10 @@ the main view should not usually stop it."
   ;; ~/Mail, where no account takes effect and so no context is ever
   ;; entered.  Where accounts do take effect -- the Mac -- Fastmail is
   ;; a context with its own maildir, entering mu4e enters the first
-  ;; context, and these name folders that do not exist there.
+  ;; context, and these name folders that do not exist there.  There
+  ;; `rjd/mail-mode' trashes and refiles each message into its own
+  ;; account's folders, so these Trash and Archive are reached only by
+  ;; a message in no account's maildir, outside every context.
   (mu4e-sent-folder   "/Sent")
   (mu4e-drafts-folder "/Drafts")
   (mu4e-trash-folder  "/Trash")

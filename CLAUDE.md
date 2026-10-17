@@ -96,7 +96,12 @@ declared there are no contexts.  A context stays entered after mu4e
 quits, so message buffers outside mu4e get the default identity and
 sending function back buffer-locally, from `message-mode-hook`.
 `rjd/mail-mode` also keeps each account's Spam and Trash out of every
-search that does not name them, through `mu4e-query-rewrite-function`.
+search that does not name them, through `mu4e-query-rewrite-function`,
+and trashes and refiles each message into the folders of the account
+whose maildir holds it, whatever context is current: mu4e chooses a
+message's context only for a context's `vars`, which `rjd-mail` does
+not use, so each `mu4e-trash-folder` and `mu4e-refile-folder` is a
+function of the message.
 It is opt-in, enabled from mu4e's form in `init.el`, which also starts
 mu4e in the background at startup so mail syncs unopened.
 
