@@ -373,10 +373,22 @@ header line -- before the blank line, not after it."
                    "Café ⚠️"))
     (should-not alive)))
 
+(ert-deftest rjd/icloud-url-response-401-says-the-password-was-refused ()
+  "A 401, as url.el reports it, names the password and the cache.
+auth-source keeps a password it has found, so a corrected one is not
+read until the cache is cleared."
+  (pcase-let ((`(,err ,dom ,_)
+               (rjd/icloud-test-url-response
+                '(:error (error http 401)) 401 "Unauthorized")))
+    (should (string-search "refused" err))
+    (should (string-search "caldav.icloud.com" err))
+    (should (string-search "auth-source-forget-all-cached" err))
+    (should-not dom)))
+
 (ert-deftest rjd/icloud-url-response-anything-else-is-an-error ()
   (pcase-let ((`(,err ,dom ,alive)
-               (rjd/icloud-test-url-response nil 401 "Unauthorized")))
-    (should (string-search "HTTP 401" err))
+               (rjd/icloud-test-url-response nil 500 "Internal Server Error")))
+    (should (string-search "HTTP 500" err))
     (should-not dom)
     (should-not alive))
   (pcase-let ((`(,err ,dom ,_)

@@ -417,12 +417,19 @@ credentials go in the header, and a refusal is an error like any other."
 (defun rjd/icloud--url-response (status method url callback)
   "Hand the response in the current buffer to CALLBACK, and kill it.
 STATUS is url.el's; METHOD and URL are the request's.  Anything but a
-207 Multi-Status is an error."
+207 Multi-Status is an error.  A 401 is told apart, since it is the
+password: auth-source keeps one it has found, so a corrected password
+is not read until its cache is cleared."
   (let ((buffer (current-buffer))
         err dom)
     (unwind-protect
         (progn
-          (setq err (cond ((plist-get status :error)
+          (setq err (cond ((eql url-http-response-status 401)
+                           (format "iCloud refused the password for %s; check \
+the app-specific password at %s in auth-source, and after changing it \
+run `auth-source-forget-all-cached'"
+                                   rjd/icloud-account rjd/icloud-auth-host))
+                          ((plist-get status :error)
                            (format "%s %s: %S" method url
                                    (plist-get status :error)))
                           ((not (eql url-http-response-status 207))
