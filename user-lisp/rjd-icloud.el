@@ -429,15 +429,24 @@ STATUS is url.el's; METHOD and URL are the request's.  Anything but a
                            (format "%s %s: HTTP %s" method url
                                    url-http-response-status))))
           (unless err
+            ;; `url-http-end-of-headers' is the end of the last header
+            ;; line, before the blank line; anything before an XML
+            ;; declaration, even that newline, makes libxml reject it.
             (let ((text (decode-coding-string
                          (buffer-substring-no-properties
-                          url-http-end-of-headers (point-max))
+                          (save-excursion
+                            (goto-char url-http-end-of-headers)
+                            (skip-chars-forward "\r\n")
+                            (point))
+                          (point-max))
                          'utf-8)))
               (setq dom (with-temp-buffer
                           (insert text)
                           (libxml-parse-xml-region (point-min) (point-max))))
               (unless dom
-                (setq err (format "%s %s: unreadable response" method url))))))
+                (setq err (format "%s %s: unreadable response, beginning %S"
+                                  method url
+                                  (truncate-string-to-width text 60 nil nil "…")))))))
       (kill-buffer buffer))
     (funcall callback err dom)))
 

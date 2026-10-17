@@ -344,13 +344,16 @@ failure after a success is."
 
 (defun rjd/icloud-test-url-response (status code body)
   "What CALLBACK gets for a url.el response of CODE and BODY, with STATUS.
-And whether the response buffer survived, which it should not."
+And whether the response buffer survived, which it should not.  The
+buffer is as url.el leaves it: headers stripped of their carriage
+returns, and `url-http-end-of-headers' a marker at the end of the last
+header line -- before the blank line, not after it."
   (let ((buffer (generate-new-buffer " *rjd-icloud-http*"))
         result)
     (with-current-buffer buffer
-      (insert (format "HTTP/1.1 %s Whatever\r\nContent-Type: text/xml\r\n\r\n"
-                      code))
-      (setq-local url-http-end-of-headers (point))
+      (insert (format "HTTP/1.1 %s Whatever\nContent-Type: text/xml" code))
+      (setq-local url-http-end-of-headers (point-marker))
+      (insert "\n\n")
       (setq-local url-http-response-status code)
       (insert (encode-coding-string body 'utf-8))
       (set-buffer-multibyte nil)
@@ -362,7 +365,9 @@ And whether the response buffer survived, which it should not."
   (pcase-let ((`(,err ,dom ,alive)
                (rjd/icloud-test-url-response
                 nil 207
-                "<multistatus xmlns=\"DAV:\"><response><displayname>Café ⚠️</displayname></response></multistatus>")))
+                (concat "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                        "<multistatus xmlns=\"DAV:\"><response><displayname>"
+                        "Café ⚠️</displayname></response></multistatus>"))))
     (should-not err)
     (should (equal (dom-inner-text (car (dom-by-tag dom 'displayname)))
                    "Café ⚠️"))
@@ -379,6 +384,54 @@ And whether the response buffer survived, which it should not."
                 '(:error (error "connection refused")) 207 "")))
     (should (string-search "connection refused" err))
     (should-not dom)))
+
+
+(defun rjd/icloud-test-serve (fixture)
+  "Start a local HTTP server answering every request with FIXTURE, as 207.
+Returns the server process; its port is in its `:service' contact."
+  (let ((body (with-temp-buffer
+                (set-buffer-multibyte nil)
+                (insert-file-contents-literally
+                 (expand-file-name fixture rjd/icloud-test-fixtures))
+                (buffer-string))))
+    (make-network-process
+     :name "rjd-icloud-test-server" :server t :host 'local :service t
+     :family 'ipv4 :coding 'binary
+     :filter (lambda (process input)
+               ;; Answer once the request's body has arrived: url.el
+               ;; sends it after the headers' blank line.
+               (when (string-search "</d:propfind>" input)
+                 (process-send-string
+                  process
+                  (concat "HTTP/1.1 207 Multi-Status\r\n"
+                          "Content-Type: text/xml; charset=UTF-8\r\n"
+                          (format "Content-Length: %d\r\n" (length body))
+                          "Connection: close\r\n\r\n"
+                          body))
+                 (process-send-eof process))))))
+
+(ert-deftest rjd/icloud-url-request-reads-a-real-response ()
+  "A request through url.el, to a local server, comes back parsed.
+The other tests replace the request function, so only this one shows
+the body is found where url.el leaves it."
+  (let* ((server (rjd/icloud-test-serve "principal.xml"))
+         (port (process-contact server :service))
+         result)
+    (unwind-protect
+        (progn
+          (rjd/icloud--url-request
+           "PROPFIND" (format "http://127.0.0.1:%d/" port) "0"
+           rjd/icloud--principal-body "Basic eA=="
+           (lambda (err dom) (setq result (list err dom))))
+          (with-timeout (10 (ert-fail "no response within 10 seconds"))
+            (while (not result)
+              (accept-process-output nil 0.05)))
+          (should-not (car result))
+          (should (equal (rjd/icloud--href-in (cadr result)
+                                              'current-user-principal
+                                              rjd/icloud-server)
+                         "https://caldav.icloud.com/1234567890/principal/")))
+      (delete-process server))))
 
 
 ;;; Password
