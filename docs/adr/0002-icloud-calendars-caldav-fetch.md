@@ -58,7 +58,8 @@ named zone, never assumed to be UTC.
 
 **One disposable calendar file per calendar.**  Each calendar is
 written to its own calendar file under `~/org-agenda/calendars/`,
-labelled with its display name by `#+CATEGORY:` and dated by a
+labelled by `#+CATEGORY:` with its display name, or with a shorter
+category given beside the name in `private.el`, and dated by a
 `#+FETCHED:` line.  The file is named `icloud-SLUG.org`, the slug being
 the display name in lower case with apostrophes dropped and every other
 run of characters but letters and digits made one `-`
@@ -145,6 +146,6 @@ so a bad upgrade is bypassed by turning it off.
   match.
 - **Naming calendars by URL** (rejected).  It survives a rename but is
   opaque in `private.el`, and the display name doubles as the agenda's
-  category.
+  category unless a shorter one is given.
 - **Rewriting `org-agenda-files` at runtime from `private.el`**
   (rejected).  It would end `init.el` being the only source of the list.

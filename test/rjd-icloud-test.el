@@ -248,6 +248,15 @@ the 08:00 call would move."
     (should-not rjd/icloud--fetching)
     (should-not messages)))
 
+(ert-deftest rjd/icloud-fetch-writes-a-calendar-s-own-category ()
+  "A calendar given as (NAME . CATEGORY) is labelled CATEGORY, but its
+file is still named for NAME."
+  (rjd/icloud-test-fetching '(("Probe" . "P.")) rjd/icloud-test-probe-report
+    (rjd/icloud-fetch)
+    (should (string-prefix-p "#+CATEGORY: P.\n"
+                             (rjd/icloud-test-file dir "Probe")))
+    (should-not messages)))
+
 (ert-deftest rjd/icloud-fetch-only-reads ()
   "Every request is a PROPFIND or a REPORT, with the account's Basic auth."
   (rjd/icloud-test-fetching '("Probe") rjd/icloud-test-probe-report

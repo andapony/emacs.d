@@ -79,10 +79,17 @@ Its app-specific password is looked up in auth-source under the host
 
 (defcustom rjd/icloud-calendars nil
   "Display names of the iCloud calendars to fetch, as iCloud shows them.
-\\[rjd/icloud-list-calendars] lists the account's.  A calendar fed from
-org, such as one beorg writes, must not be named here: its events would
-come back into the agenda as copies of org's own."
-  :type '(repeat string)
+\\[rjd/icloud-list-calendars] lists the account's.  The display name
+is also the category that labels the calendar's entries in the agenda,
+unless the calendar is given as (NAME . CATEGORY): a name wider than
+the agenda's category column pushes the rest of the line over.  A
+calendar fed from org, such as one beorg writes, must not be named
+here: its events would come back into the agenda as copies of org's
+own."
+  :type '(repeat (choice (string :tag "Display name")
+                         (cons :tag "Display name and category"
+                               (string :tag "Display name")
+                               (string :tag "Category"))))
   :group 'rjd/icloud)
 
 (defcustom rjd/icloud-directory "~/org-agenda/calendars/"
@@ -172,6 +179,16 @@ outside a container unless `rjd/icloud-enabled' says otherwise."
 
 ;;; Files
 
+(defun rjd/icloud--names ()
+  "The display names of the calendars in `rjd/icloud-calendars'."
+  (mapcar (lambda (calendar) (if (consp calendar) (car calendar) calendar))
+          rjd/icloud-calendars))
+
+(defun rjd/icloud--category (name)
+  "The category of the calendar called NAME; see `rjd/icloud-calendars'."
+  (or (cdr (assoc name (seq-filter #'consp rjd/icloud-calendars)))
+      name))
+
 (defun rjd/icloud-file-name (name)
   "The name of the calendar file for the calendar called NAME.
 icloud-SLUG.org, where SLUG is NAME in lower case, without apostrophes,
@@ -209,7 +226,7 @@ the file is the calendar's."
 
 (defun rjd/icloud--file-contents (name events)
   "The text of the calendar file of the calendar NAME, holding EVENTS."
-  (concat (format "#+CATEGORY: %s\n" name)
+  (concat (format "#+CATEGORY: %s\n" (rjd/icloud--category name))
           (format-time-string "#+FETCHED: [%F %a %H:%M]\n")
           "# Fetched from iCloud by rjd-icloud, and rewritten whole by every\n"
           "# fetch: anything written here is lost.\n\n"
@@ -555,7 +572,7 @@ AUTHORIZATION is the header value to send."
 CALENDARS is discovery's alist.  Returns (WANTED . ERRORS), WANTED an
 alist of (NAME . URL).  A name no calendar has is an error, and so are
 names that would share a file, which are all refused."
-  (let ((groups (seq-group-by #'rjd/icloud-file-name rjd/icloud-calendars))
+  (let ((groups (seq-group-by #'rjd/icloud-file-name (rjd/icloud--names)))
         wanted errors)
     (pcase-dolist (`(,file . ,names) groups)
       (cond ((cdr names)
