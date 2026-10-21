@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- Made by hand, in the shape of iCloud's expanded REPORT response
+     (probe-expanded.xml): no VTIMEZONE, no VERSION or PRODID.  Each
+     event gives its length as DURATION, with no DTEND, as Fastmail
+     sends every event and iCloud some invitations.  One response per
+     case. -->
+<multistatus xmlns="DAV:">
+  <response>
+    <href>/1234567890/calendars/PROBE-CALENDAR/hour.ics</href>
+    <propstat><prop><calendar-data xmlns="urn:ietf:params:xml:ns:caldav"><![CDATA[BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:hour
+DTSTAMP:20261017T000000Z
+SUMMARY:Standup
+DTSTART:20261021T160000Z
+DURATION:PT1H
+END:VEVENT
+END:VCALENDAR
+]]></calendar-data></prop><status>HTTP/1.1 200 OK</status></propstat>
+  </response>
+  <response>
+    <href>/1234567890/calendars/PROBE-CALENDAR/late-show.ics</href>
+    <propstat><prop><calendar-data xmlns="urn:ietf:params:xml:ns:caldav"><![CDATA[BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:late-show
+DTSTAMP:20261017T000000Z
+SUMMARY:Late show
+DTSTART;TZID=America/Los_Angeles:20261023T220000
+DURATION:PT3H
+END:VEVENT
+END:VCALENDAR
+]]></calendar-data></prop><status>HTTP/1.1 200 OK</status></propstat>
+  </response>
+  <response>
+    <href>/1234567890/calendars/PROBE-CALENDAR/night-flight.ics</href>
+    <propstat><prop><calendar-data xmlns="urn:ietf:params:xml:ns:caldav"><![CDATA[BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:night-flight
+DTSTAMP:20261017T000000Z
+SUMMARY:Night flight
+DTSTART:20261030T230000Z
+DURATION:PT2H
+END:VEVENT
+END:VCALENDAR
+]]></calendar-data></prop><status>HTTP/1.1 200 OK</status></propstat>
+  </response>
+  <response>
+    <href>/1234567890/calendars/PROBE-CALENDAR/retreat.ics</href>
+    <propstat><prop><calendar-data xmlns="urn:ietf:params:xml:ns:caldav"><![CDATA[BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:retreat
+DTSTAMP:20261017T000000Z
+SUMMARY:Retreat
+DTSTART:20261031T160000Z
+DURATION:P1D
+END:VEVENT
+END:VCALENDAR
+]]></calendar-data></prop><status>HTTP/1.1 200 OK</status></propstat>
+  </response>
+  <response>
+    <href>/1234567890/calendars/PROBE-CALENDAR/conference.ics</href>
+    <propstat><prop><calendar-data xmlns="urn:ietf:params:xml:ns:caldav"><![CDATA[BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:conference
+DTSTAMP:20261017T000000Z
+SUMMARY:Conference
+DTSTART;VALUE=DATE:20261130
+DURATION:P3D
+END:VEVENT
+END:VCALENDAR
+]]></calendar-data></prop><status>HTTP/1.1 200 OK</status></propstat>
+  </response>
+  <response>
+    <href>/1234567890/calendars/PROBE-CALENDAR/holiday.ics</href>
+    <propstat><prop><calendar-data xmlns="urn:ietf:params:xml:ns:caldav"><![CDATA[BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:holiday
+DTSTAMP:20261017T000000Z
+SUMMARY:Holiday
+DTSTART;VALUE=DATE:20261228
+DURATION:P1W
+END:VEVENT
+END:VCALENDAR
+]]></calendar-data></prop><status>HTTP/1.1 200 OK</status></propstat>
+  </response>
+</multistatus>
