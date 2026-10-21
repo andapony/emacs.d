@@ -49,6 +49,8 @@
 (defvar mu4e-contexts)
 (defvar mu4e-get-mail-command)
 (defvar mu4e-query-rewrite-function)
+(defvar gnus-ignored-from-addresses)
+(defvar gnus-icalendar-additional-identities)
 
 
 ;;; Fixtures
@@ -1374,6 +1376,94 @@ Built by gnus-icalendar for the attendee matching IDS, with
                                      '("me@example\\.net"))
                                     "\r?\n" t))
                      2))))
+
+
+;;; Invitations to an alias
+
+(defconst rjd/mail-test-alias-invitation
+  "BEGIN:VCALENDAR
+PRODID:-//Fastmail/2020.5/EN
+VERSION:2.0
+METHOD:REQUEST
+BEGIN:VEVENT
+DTSTART:20261011T003000Z
+DTEND:20261011T013000Z
+DTSTAMP:20261011T001500Z
+ORGANIZER;CN=Org Person:mailto:org@example.com
+UID:def456@fastmail.example
+ATTENDEE;CN=Org Person;PARTSTAT=ACCEPTED:mailto:org@example.com
+ATTENDEE;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:anything@someone.example
+SEQUENCE:0
+SUMMARY:Invitation to an alias
+END:VEVENT
+END:VCALENDAR
+"
+  "An invitation to a Fastmail catch-all alias, with no name to match.")
+
+(defmacro rjd/mail-test-as-gmail (mode &rest body)
+  "Run BODY with the globals the Gmail identity and `rjd/mail-mode' MODE.
+MODE is 1 or -1.  The accounts are declared only for BODY: the mode is
+turned on with none, as making their contexts needs mu4e, which these
+tests do without."
+  (declare (indent 1))
+  `(progn
+     (require 'gnus-icalendar)
+     (let ((rjd/mail-accounts nil)
+           (mu4e-contexts nil)
+           (mu4e-get-mail-command "true")
+           (mu4e-query-rewrite-function 'identity)
+           (rjd/mail-mode nil)
+           (rjd/mail--before-mode nil)
+           (user-mail-address (plist-get rjd/mail-test-gmail :address))
+           (user-full-name (plist-get rjd/mail-test-gmail :full-name))
+           (message-alternative-emails nil)
+           (gnus-ignored-from-addresses nil)
+           (gnus-icalendar-additional-identities nil))
+       (rjd/mail-mode ,mode)
+       (unwind-protect
+           (let ((rjd/mail-accounts (list rjd/mail-test-gmail
+                                          rjd/mail-test-fastmail-aliases)))
+             ,@body)
+         (rjd/mail-mode -1)))))
+
+(defun rjd/mail-test-recognised-p (invitation)
+  "Non-nil if gnus-icalendar offers to answer INVITATION.
+It offers the Accept, Tentative and Decline buttons when one of
+`gnus-icalendar-identities' finds an attendee asked to reply."
+  (with-temp-buffer
+    (insert invitation)
+    (gnus-icalendar-event:rsvp
+     (gnus-icalendar-event-from-buffer (current-buffer)
+                                       (gnus-icalendar-identities)))))
+
+(ert-deftest rjd/mail-invitation-to-an-alias-is-recognised-in-any-context ()
+  "An alias with no name is an identity while the Gmail one is current."
+  (rjd/mail-test-as-gmail 1
+    (should (rjd/mail-test-recognised-p rjd/mail-test-alias-invitation))))
+
+
+(ert-deftest rjd/mail-reply-to-an-alias-answers-for-that-alias ()
+  "The reply carries the alias's attendee line alone, with the status."
+  (dolist (case '((accepted . "ACCEPTED")
+                  (tentative . "TENTATIVE")
+                  (declined . "DECLINED")))
+    (rjd/mail-test-as-gmail 1
+      (with-temp-buffer
+        (insert rjd/mail-test-alias-invitation)
+        (should (equal (rjd/mail-test-attendees
+                        (split-string (gnus-icalendar-event-reply-from-buffer
+                                       (current-buffer) (car case)
+                                       (gnus-icalendar-identities))
+                                      "\r?\n" t))
+                       (list (concat "ATTENDEE;PARTSTAT=" (cdr case)
+                                     ";RSVP=TRUE:mailto:anything@someone.example"))))))))
+
+(ert-deftest rjd/mail-invitation-to-an-alias-needs-the-mode ()
+  "Off, the alias is only the current context's, and Gmail's is current."
+  ;; On and off again first, so that turning it off is what is tested.
+  (rjd/mail-test-as-gmail 1)
+  (rjd/mail-test-as-gmail -1
+    (should-not (rjd/mail-test-recognised-p rjd/mail-test-alias-invitation))))
 
 
 (provide 'rjd-mail-test)

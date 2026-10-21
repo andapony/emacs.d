@@ -147,6 +147,20 @@ either silently, the replies simply carrying every attendee again.
 advice is the first place to look**; `rjd-mail.el`'s commentary names
 what it hooks.  Remove it once Emacs fixes the builder upstream.
 
+An invitation to any active account's address or alias gets its
+Accept, Tentative and Decline buttons whatever context is current:
+`rjd/mail-mode` filters the return of gnus-icalendar's
+`gnus-icalendar-identities` with `:filter-return` advice, adding a
+predicate true of every active account's address and `:addresses`.
+Without it gnus-icalendar knows only the current context's identity,
+so an invitation to a Fastmail alias with no name to match, opened in
+the Gmail context, could not be answered.  It relies on
+gnus-icalendar's attendee lookup accepting predicates as identities;
+an upgrade that renames the function or drops that breaks it silently,
+the buttons simply missing.  **If an invitation to an alias shows no
+buttons, that advice is the first place to look.**  Replies stay mail
+only: nothing is written to any calendar.
+
 Every mail command (mbsync, msmtp, oama) is built with
 `rjd/mail-command`, which puts `rjd/mail-command-prefix` in front: nil
 inside `claude-dev`, the mail container's `docker exec -i mail` on the
