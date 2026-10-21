@@ -10,8 +10,9 @@
 ;; iCloud's (fixtures/caldav/icloud/): probe-expanded.xml is iCloud's
 ;; expansion of a weekly event with one occurrence moved and one
 ;; deleted; cases-expanded.xml is made by hand in the same shape, for
-;; what the probe did not cover.  The iCloud account is declared by
-;; `rjd/caldav-test-icloud'.
+;; what the probe did not cover, and durations-expanded.xml likewise,
+;; for events that give a DURATION rather than a DTEND.  The iCloud
+;; account is declared by `rjd/caldav-test-icloud'.
 ;;
 ;; Times are checked in a fixed local zone, set by
 ;; `rjd/caldav-test-in-zone', so the results do not depend on the
@@ -247,6 +248,66 @@ the 08:00 call would move."
                   (list :summary "Line one\nline two" :start '(10 20 2026)))
                  "* Line one line two\n<2026-10-20 Tue>\n")))
 
+
+;;; Durations
+
+(defconst rjd/caldav-test-durations-report
+  `((("REPORT" . ,rjd/caldav-test-probe-url) . "durations-expanded.xml"))
+  "The reply to the Probe calendar's REPORT, every event with a DURATION.")
+
+(defun rjd/caldav-test-fetch-durations (zone)
+  "The Probe calendar's file, fetched with local time ZONE, from
+durations-expanded.xml."
+  (rjd/caldav-test-fetching '("Probe") rjd/caldav-test-durations-report
+    (rjd/caldav-test-in-zone zone
+      (rjd/caldav-fetch)
+      (should-not messages)
+      (rjd/caldav-test-file dir "Probe"))))
+
+(ert-deftest rjd/caldav-a-duration-gives-a-timed-event-its-end ()
+  "A one-hour DURATION ends the event an hour after it starts, on the day."
+  (should (string-search "* Standup\n<2026-10-21 Wed 09:00-10:00>\n"
+                         (rjd/caldav-test-fetch-durations
+                          "America/Los_Angeles"))))
+
+
+(ert-deftest rjd/caldav-a-duration-past-midnight-gives-a-range ()
+  "A timed event whose DURATION crosses midnight spans two dates."
+  (should (string-search
+           "* Late show\n<2026-10-23 Fri 22:00>--<2026-10-24 Sat 01:00>\n"
+           (rjd/caldav-test-fetch-durations "America/Los_Angeles"))))
+
+(ert-deftest rjd/caldav-a-duration-s-days-are-calendar-days ()
+  "A day of DURATION ends at the same local time the next day, though
+the clocks go back between them: Los Angeles leaves summer time on 1
+November 2026, so the day is 25 hours long."
+  (should (string-search
+           "* Retreat\n<2026-10-31 Sat 09:00>--<2026-11-01 Sun 09:00>\n"
+           (rjd/caldav-test-fetch-durations "America/Los_Angeles"))))
+
+(ert-deftest rjd/caldav-an-all-day-duration-spans-its-days ()
+  "An all-day event's DURATION, in days or in weeks, gives the exclusive
+end date, as DTEND does: three days from 30 November, a week from 28
+December."
+  (let ((text (rjd/caldav-test-fetch-durations "America/Los_Angeles")))
+    (should (string-search
+             "* Conference\n<2026-11-30 Mon>--<2026-12-02 Wed>\n" text))
+    (should (string-search
+             "* Holiday\n<2026-12-28 Mon>--<2027-01-03 Sun>\n" text))))
+
+(ert-deftest rjd/caldav-durations-in-london ()
+  "The same events seen from London.  The UTC night flight now crosses
+midnight and the late show does not; London has already left summer
+time by the retreat, so its day is 24 hours long."
+  (should (string-suffix-p
+           (concat "\n\n"
+                   "* Standup\n<2026-10-21 Wed 17:00-18:00>\n"
+                   "* Late show\n<2026-10-24 Sat 06:00-09:00>\n"
+                   "* Night flight\n<2026-10-30 Fri 23:00>--<2026-10-31 Sat 01:00>\n"
+                   "* Retreat\n<2026-10-31 Sat 16:00>--<2026-11-01 Sun 16:00>\n"
+                   "* Conference\n<2026-11-30 Mon>--<2026-12-02 Wed>\n"
+                   "* Holiday\n<2026-12-28 Mon>--<2027-01-03 Sun>\n")
+           (rjd/caldav-test-fetch-durations "Europe/London"))))
 
 ;;; Fetching
 

@@ -43,6 +43,11 @@
 ;; RECURRENCE-ID.  If a server stopped expanding, a calendar would show
 ;; each recurring event once, on its first date.
 ;;
+;; An event may give its length as DURATION rather than its end as
+;; DTEND, as Fastmail does for every event and iCloud for some
+;; invitations; its end is then worked out here, see
+;; `rjd/caldav--end'.
+;;
 ;; Each password is from auth-source, under the host of the account's
 ;; server and the account's user: `caldav.icloud.com' for iCloud.  Only
 ;; a fetch begun by opening the agenda, or by hand, may prompt for one:
@@ -325,6 +330,37 @@ seconds since the epoch, see `rjd/caldav--absolute'."
         value
       (rjd/caldav--absolute value (icalendar-property-tzid node)))))
 
+(defun rjd/caldav--end (vevent start)
+  "The end of VEVENT, which starts at START, or nil if it gives none.
+It is VEVENT's `icalendar-dtend', or else START plus its
+`icalendar-duration'; see `rjd/caldav--time'.  A duration's days and
+weeks are calendar days in the local zone, so a day across a change of
+the clocks still ends at the time of day it began; its hours, minutes
+and seconds are exact.  From a date, the end is the date the days and
+weeks give, exclusive as a DTEND's is."
+  (or (rjd/caldav--time vevent 'icalendar-dtend)
+      (when-let* ((node (icalendar-ast-node-first-child-of
+                         'icalendar-duration vevent))
+                  (duration (icalendar-ast-node-value
+                             (icalendar-ast-node-value node))))
+        (let ((days (if (integerp duration)
+                        (* 7 duration)
+                      (or (decoded-time-day duration) 0)))
+              (seconds (if (integerp duration)
+                           0
+                         (+ (* 3600 (or (decoded-time-hour duration) 0))
+                            (* 60 (or (decoded-time-minute duration) 0))
+                            (or (decoded-time-second duration) 0)))))
+          (if (numberp start)
+              (let ((local (decode-time start)))
+                (setf (decoded-time-day local) (+ (decoded-time-day local) days)
+                      (decoded-time-dst local) -1
+                      (decoded-time-zone local) nil)
+                (+ (float-time (encode-time local)) seconds))
+            (let ((end (decode-time (rjd/caldav--date-time start days))))
+              (list (decoded-time-month end) (decoded-time-day end)
+                    (decoded-time-year end))))))))
+
 (defun rjd/caldav--declined-p (vevent user)
   "Non-nil if USER, an address, is an attendee of VEVENT and has declined it."
   (seq-some (lambda (attendee)
@@ -350,7 +386,7 @@ without a start.  The plist has :summary, :start and :end, see
                 (rjd/caldav--declined-p vevent user))
       (list :summary (icalendar-component-summary vevent)
             :start start
-            :end (rjd/caldav--time vevent 'icalendar-dtend)
+            :end (rjd/caldav--end vevent start)
             :location (icalendar-with-property-of vevent 'icalendar-location)
             :description (icalendar-component-description vevent)))))
 
