@@ -120,6 +120,24 @@
 ;; if an acceptance stops showing on the organiser's calendar, look
 ;; here first.  Remove it once Emacs fixes the builder upstream.
 ;;
+;; gnus-icalendar offers its Accept, Tentative and Decline buttons, and
+;; builds the reply, for the invitation's attendee that one of the
+;; public `gnus-icalendar-identities' matches.  Those are the current
+;; identity's: `user-mail-address', `user-full-name' and
+;; `message-alternative-emails', which a context sets.  So an
+;; invitation to a Fastmail alias, with no name to match, opened while
+;; the Gmail context is current, could not be answered.  The mode
+;; filters the identities' return with
+;; `rjd/mail--with-account-identities', which adds one predicate,
+;; `rjd/mail-own-address-p': true of any active account's address or
+;; alias.  The #20 advice finds the replier through the same
+;; identities, so the reply still answers for that attendee alone.  It
+;; goes to the organiser by mail only, as before; nothing is written to
+;; any calendar, to org or to the diary.  If `gnus-icalendar-identities' is renamed, or
+;; the attendee lookup stops accepting predicates, such invitations
+;; silently lose their buttons again -- so if an invitation to an
+;; alias shows none, look here first.
+;;
 ;; Enable with `rjd/mail-mode', once mu4e has loaded.
 
 ;;; Code:
@@ -688,6 +706,23 @@ makes the reply, the reply is returned as BUILD made it."
                          (icalendar-ast-node-children vevent))))
     reply))
 
+(defun rjd/mail-own-address-p (address)
+  "Non-nil if ADDRESS, a bare address, is an active account's.
+That is, one of the accounts in `rjd/mail-active-accounts' has it as
+its address or among its aliases; see `rjd/mail--address-p'."
+  (seq-some (lambda (account) (rjd/mail--address-p account address))
+            (rjd/mail-active-accounts)))
+
+(defun rjd/mail--with-account-identities (identities)
+  "IDENTITIES, and `rjd/mail-own-address-p' after them.
+Advice filtering the return of `gnus-icalendar-identities', which
+gnus-icalendar matches an invitation's attendees against, both to
+offer its buttons and to build the reply.  It knows only the current
+identity -- a context's address and aliases -- so without this an
+invitation to another account's alias, with no name to match, could
+not be answered from that context."
+  (append identities (list #'rjd/mail-own-address-p)))
+
 
 ;;; Syncing from startup
 
@@ -738,7 +773,11 @@ if a context was entered.
 While on, each mu4e index first moves the accounts' unread mail that
 carries flags out of new/; see `rjd/mail-move-flagged-new-to-cur'.
 And a reply to a calendar invitation carries only the attendee who
-replies; see `rjd/mail--reply-as-one-attendee'."
+replies; see `rjd/mail--reply-as-one-attendee'.  And an invitation to
+any active account's address or alias can be answered, whatever the
+context: advice on `gnus-icalendar-identities' adds them to the
+identities gnus-icalendar matches attendees against; see
+`rjd/mail--with-account-identities'."
   :global t
   :group 'rjd/mail
   (if rjd/mail-mode
@@ -770,12 +809,16 @@ replies; see `rjd/mail--reply-as-one-attendee'."
         (advice-add 'mu4e-update-index :before
                     #'rjd/mail--move-flagged-new-before-index)
         (advice-add 'gnus-icalendar-event--build-reply :around
-                    #'rjd/mail--reply-as-one-attendee))
+                    #'rjd/mail--reply-as-one-attendee)
+        (advice-add 'gnus-icalendar-identities :filter-return
+                    #'rjd/mail--with-account-identities))
     (remove-hook 'message-mode-hook #'rjd/mail--restore-default-identity)
     (advice-remove 'mu4e-update-index
                    #'rjd/mail--move-flagged-new-before-index)
     (advice-remove 'gnus-icalendar-event--build-reply
                    #'rjd/mail--reply-as-one-attendee)
+    (advice-remove 'gnus-icalendar-identities
+                   #'rjd/mail--with-account-identities)
     (when rjd/mail--before-mode
       (rjd/mail--leave)
       (setq mu4e-contexts (nth 0 rjd/mail--before-mode)

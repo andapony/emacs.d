@@ -285,6 +285,15 @@ over in a mu4e view.  Skipped where mu4e is not installed."
   (should (equal (rjd/smoke-render-invitation)
                  '("Accept" "Tentative" "Decline"))))
 
+(ert-deftest rjd/smoke-mu4e-invitations-to-any-account-are-answered ()
+  "`rjd/mail-mode' adds every active account to gnus-icalendar's identities.
+So an invitation to another account's alias gets its buttons, whatever
+context is current.  Skipped where mu4e is not installed."
+  (skip-unless (locate-library "mu4e"))
+  (require 'mu4e)
+  (should (advice-member-p #'rjd/mail--with-account-identities
+                           'gnus-icalendar-identities)))
+
 (ert-deftest rjd/smoke-mu4e-invitations-make-no-org-entry ()
   "Answering an invitation adds it neither to org nor to the diary.
 The calendar fetch brings accepted events into the agenda; an entry
