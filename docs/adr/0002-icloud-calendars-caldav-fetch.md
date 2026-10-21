@@ -1,8 +1,13 @@
 ---
-status: accepted
+status: accepted, amended by ADR-0003
 ---
 
 # iCloud calendars: CalDAV fetch with auth-source
+
+Amended by [ADR-0003](0003-caldav-accounts.md): the fetcher described
+here is now `rjd-caldav`, which fetches any number of CalDAV accounts,
+iCloud the first.  The package's name, the single account and the fixed
+auth-source host below are superseded there; the principles stand.
 
 Builds on [ADR-0001](0001-mail-and-calendar-architecture.md), and departs
 from two of its premises: that every credential sits in the mail

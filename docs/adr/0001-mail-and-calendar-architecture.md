@@ -101,7 +101,8 @@ events do not loop back into another calendar.  Invitations are
 answered from mu4e with mu4e-icalendar, whose option to add events to
 org stays off; accepted events arrive through the fetch.  iCloud
 calendars are fetched another way, and the calendar file moves into a
-calendar directory: see [ADR-0002](0002-icloud-calendars-caldav-fetch.md).
+calendar directory: see [ADR-0002](0002-icloud-calendars-caldav-fetch.md)
+and [ADR-0003](0003-caldav-accounts.md).
 
 **Identity: Fastmail stays the global default.**  Accounts are declared
 as data in `private.el`, one plist per account, and the `rjd-mail`

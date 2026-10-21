@@ -27,6 +27,12 @@ machine.  Not everything Calendar.app shows is one: Google calendars
 and `.ics` subscriptions it displays are not.
 _Avoid_: Apple calendar, Calendar.app calendar
 
+**CalDAV account**:
+An account on a CalDAV server whose calendars are fetched, such as the
+user's iCloud account: a server, a user and the calendars named in
+`private.el`.  Its name begins each of its calendar files' names.
+_Avoid_: source, provider
+
 **Agenda export**:
 The single `.ics` file built from the org agenda files, so other
 calendar apps can show org's dated tasks.  Calendar files are left out

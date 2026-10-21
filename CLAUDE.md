@@ -190,24 +190,30 @@ hooks, and `rjd/gcal-mode` is opt-in, enabled from org-agenda's form in
 calls org-gcal's sync, only its fetch.  ERT tests:
 `test/rjd-gcal-test.el`.
 
-iCloud calendars reach the agenda through `rjd-icloud` (user-lisp),
-which fetches each calendar named in `private.el`'s
-`rjd/icloud-calendars`, by display name, over CalDAV into
-`icloud-SLUG.org`, rewriting the file whole after each successful
-fetch.  It only ever sends PROPFIND and REPORT: the app-specific
-password, from auth-source under `caldav.icloud.com`, could write, so
-read-only rests on the code.  Recurrences are expanded by iCloud, not
-here, and iCloud sends each time in its event's TZID with no
-VTIMEZONE, which `rjd-icloud` resolves from the system's zone database.
-**If the iCloud calendars disappear from the agenda, or their times
-shift, those two iCloud behaviours are the first place to look**;
-`test/icloud-probe.sh`, run on the host, shows what iCloud now sends,
-and `rjd-icloud.el`'s commentary has the rest.  Nothing is fetched
-inside a container, so no agent's Emacs holds the password, and a
-timer's fetch never prompts for a passphrase.  `rjd/icloud-mode` is
+CalDAV calendars, iCloud's among them, reach the agenda through
+`rjd-caldav` (user-lisp).  `private.el` declares its accounts as
+`rjd/caldav-accounts`, each a plist of a name, a CalDAV server URL, a
+user and the calendars to fetch, by display name.  Each calendar is
+fetched into `NAME-SLUG.org` (so iCloud's are `icloud-SLUG.org`),
+rewriting the file whole after each successful fetch.  It only ever
+sends PROPFIND and REPORT: each password, from auth-source under its
+server's host (`caldav.icloud.com` for iCloud) and the account's user,
+could write, so read-only rests on the code.  The accounts are fetched
+together, one failing without stopping another, and failures are
+reported once per run, naming the account.  Recurrences are expanded by
+the server, not here, and iCloud sends each time in its event's TZID
+with no VTIMEZONE, which `rjd-caldav` resolves from the system's zone
+database.  **If the iCloud calendars disappear from the agenda, or
+their times shift, those two iCloud behaviours are the first place to
+look**; `test/caldav-probe.sh`, run on the host, shows what a server
+now sends (iCloud's by default, any other named in `CALDAV_SERVER`),
+and `rjd-caldav.el`'s commentary has the rest.  Nothing is fetched
+inside a container, so no agent's Emacs holds a password, and a
+timer's fetch never prompts for a passphrase.  `rjd/caldav-mode` is
 opt-in, enabled from org-agenda's form beside `rjd/gcal-mode`.  ERT
-tests: `test/rjd-icloud-test.el`, against sanitised recordings in
-`test/fixtures/icloud/`; ADR-0002 has the design.
+tests: `test/rjd-caldav-test.el`, against sanitised recordings in
+`test/fixtures/caldav/`, one directory per server; ADR-0002 has the
+design, and ADR-0003 its generalisation to several accounts.
 
 ## Git through the container
 

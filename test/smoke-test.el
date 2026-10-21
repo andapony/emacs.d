@@ -537,25 +537,27 @@ another calendar through the exported .ics."
       (delete-directory dir t))))
 
 
-;;; iCloud calendars
+;;; CalDAV calendars
 
-(ert-deftest rjd/smoke-icloud-is-on-once-the-agenda-loads ()
-  "The iCloud calendars are fetched into the calendar directory.
+(ert-deftest rjd/smoke-caldav-is-on-once-the-agenda-loads ()
+  "The CalDAV calendars are fetched into the calendar directory.
 The mode is turned on, through its autoload, once the agenda loads, and
 the package is not loaded before then."
-  (should-not (memq 'rjd-icloud rjd/smoke-features-after-init))
+  (should-not (memq 'rjd-caldav rjd/smoke-features-after-init))
   (require 'org-agenda)
-  (should rjd/icloud-mode)
-  (should (equal rjd/icloud-directory rjd/calendar-directory)))
+  (should rjd/caldav-mode)
+  (should (equal rjd/caldav-directory rjd/calendar-directory)))
 
-(ert-deftest rjd/smoke-icloud-fetches-nothing-in-a-container ()
+(ert-deftest rjd/smoke-caldav-fetches-nothing-in-a-container ()
   "Inside a container no calendar is fetched, whatever private.el says."
-  (require 'rjd-icloud)
-  (let ((rjd/icloud-account "user@example.com")
-        (rjd/icloud-calendars '("Home"))
-        (rjd/icloud-container-marker-files (list (locate-library "rjd-icloud"))))
-    (should (eq rjd/icloud-enabled 'auto))
-    (should-not (rjd/icloud-active-p))))
+  (require 'rjd-caldav)
+  (let ((rjd/caldav-accounts '((:name "icloud"
+                                :server "https://caldav.icloud.com/"
+                                :user "user@example.com"
+                                :calendars ("Home"))))
+        (rjd/caldav-container-marker-files (list (locate-library "rjd-caldav"))))
+    (should (eq rjd/caldav-enabled 'auto))
+    (should-not (rjd/caldav-active-p))))
 
 (ert-run-tests-batch-and-exit)
 

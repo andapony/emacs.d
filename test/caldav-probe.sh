@@ -1,28 +1,28 @@
 #!/bin/sh
-# Fetch one iCloud calendar the way rjd-icloud will, and save every raw
-# response, to check that iCloud expands recurring events correctly
-# (ADR-0002) and to record test fixtures.
+# Fetch one CalDAV calendar the way rjd-caldav does, and save every raw
+# response, to check that the server expands recurring events correctly
+# (ADR-0002, ADR-0003) and to record test fixtures.
 #
-# Usage: test/icloud-probe.sh APPLE-ID CALENDAR-NAME [OUTDIR]
+# Usage: test/caldav-probe.sh USER CALENDAR-NAME [OUTDIR]
 #
-# Another CalDAV server is probed by naming it in CALDAV_SERVER, such as
-# Fastmail's: CALDAV_SERVER=https://caldav.fastmail.com/dav/.  Its host
-# is then the authinfo machine too.
-#
-# The app-specific password is read from the `machine caldav.icloud.com'
-# line of ~/.authinfo, or the server's, or asked for.  Responses go to OUTDIR, by default
-# ~/tmp/icloud-probe -- outside this public repository, since they hold
+# The server is iCloud's unless CALDAV_SERVER names another, as the URL
+# where discovery starts -- Fastmail's, say:
+# CALDAV_SERVER=https://caldav.fastmail.com/dav/.  The password is read
+# from the ~/.authinfo line whose machine is that URL's host
+# (caldav.icloud.com for iCloud) -- the first such line, whatever its
+# login -- or asked for.  Responses go to OUTDIR, by default
+# ~/tmp/caldav-probe -- outside this public repository, since they hold
 # real event data and account IDs.  Sanitise before copying any into
-# test/.
+# test/fixtures/caldav/.
 #
-# Never issues anything but PROPFIND and REPORT.
+# Needs curl and xmllint.  Never issues anything but PROPFIND and REPORT.
 
 set -eu
 
-[ $# -ge 2 ] || { echo "usage: $0 APPLE-ID CALENDAR-NAME [OUTDIR]" >&2; exit 2; }
+[ $# -ge 2 ] || { echo "usage: $0 USER CALENDAR-NAME [OUTDIR]" >&2; exit 2; }
 user=$1
 calendar=$2
-out=${3:-$HOME/tmp/icloud-probe}
+out=${3:-$HOME/tmp/caldav-probe}
 server=${CALDAV_SERVER:-https://caldav.icloud.com/}
 host=$(echo "$server" | sed -E 's|^https?://([^/]*).*|\1|')
 origin=https://$host
@@ -32,7 +32,7 @@ pass=$(awk -v host="$host" '$1 == "machine" && $2 == host {
               for (i = 3; i < NF; i++) if ($i == "password") print $(i + 1) }' \
            "$HOME/.authinfo" 2>/dev/null | head -n 1)
 if [ -z "$pass" ]; then
-  printf 'App-specific password: ' >&2
+  printf 'Password for %s at %s: ' "$user" "$host" >&2
   stty -echo; read -r pass; stty echo; echo >&2
 fi
 
@@ -68,9 +68,16 @@ echo "home set: $home"
 dav PROPFIND "$home" 1 \
   '<d:propfind xmlns:d="DAV:"><d:prop><d:displayname/><d:resourcetype/></d:prop></d:propfind>' \
   "$out/3-calendars.xml"
+# Each name by its string value, so a CDATA section (Fastmail's) comes
+# out as the plain name rather than wrapped in <![CDATA[...]]>.
 echo "calendars:"
-xmllint --xpath "//*[local-name()='displayname']/text()" "$out/3-calendars.xml" \
-  | sed 's/^/  /'; echo
+names=$(xmllint --xpath "count(//*[local-name()='displayname'])" "$out/3-calendars.xml")
+i=1
+while [ "$i" -le "$names" ]; do
+  echo "  $(xmllint --xpath "string((//*[local-name()='displayname'])[$i])" \
+                    "$out/3-calendars.xml")"
+  i=$((i + 1))
+done
 
 path=$(xmllint --xpath "string(//*[local-name()='response'][.//*[local-name()='displayname']='$calendar']/*[local-name()='href'])" \
          "$out/3-calendars.xml")
