@@ -207,8 +207,9 @@ calls org-gcal's sync, only its fetch.  ERT tests:
 CalDAV calendars, iCloud's and Fastmail's, reach the agenda through
 `rjd-caldav` (user-lisp).  `private.el` declares its accounts as
 `rjd/caldav-accounts`, each a plist of a name, a CalDAV server URL, a
-user, the calendars to fetch, by display name, and optionally an
-aliases regexp, whose declines count as the user's.  Each calendar is
+user, the calendars to fetch, by display name, and optionally
+`:addresses`, the regexp of its aliases a mail account has, whose
+declines count as the user's.  Each calendar is
 fetched into `NAME-SLUG.org` (so iCloud's are `icloud-SLUG.org`, and
 Fastmail's `fastmail-SLUG.org`), rewriting the file whole after each
 successful fetch; calendars whose files would collide, across accounts
@@ -220,9 +221,13 @@ read-only rests on the code.  A calendar fed from org is never
 fetched, even if named: `rjd-caldav` refuses the one at org-pa's
 `org-pa-caldav-url`, read from the value `:custom` saves on the symbol
 until org-pa loads, so `private.el` must set that URL in a deferred
-form, not under `:after`.  The accounts are fetched
-together, one failing without stopping another, and failures are
-reported once per run, naming the account.  Recurrences are expanded by
+form, not under `:after`.  That rests on use-package's `:custom`
+saving the value as the symbol's `saved-value` before the package
+loads; **if org-pa's calendar ever reappears in the agenda as copies of
+org's entries, that `saved-value` is the first place to look**.  The
+accounts are fetched together, one failing without stopping another,
+and each account's run of failing fetches is reported once, naming
+it.  Recurrences are expanded by
 the server, not here, and iCloud sends each time in its event's TZID
 with no VTIMEZONE, which `rjd-caldav` resolves from the system's zone
 database.  Fastmail sends UTC, but gives every event's length as a

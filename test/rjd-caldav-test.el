@@ -151,7 +151,7 @@ it resolves iCloud's against."
 
 (defun rjd/caldav-test-fastmail (calendars &rest more)
   "The Fastmail account, as `rjd/caldav-accounts' declares it.
-With CALENDARS, and MORE properties, such as :aliases."
+With CALENDARS, and MORE properties, such as :addresses."
   (append (list :name "fastmail"
                 :server "https://caldav.fastmail.com/dav/"
                 :user "user@example.com"
@@ -229,7 +229,7 @@ DEFAULT_TASK_CALENDAR_NAME")))
 
 (defun rjd/caldav-test-fetch-fastmail-declines (&rest more)
   "Fastmail's Probe calendar file, fetched from declines-expanded.xml.
-The account has MORE properties, such as :aliases."
+The account has MORE properties, such as :addresses."
   (rjd/caldav-test-fetching nil
       `((("REPORT" . ,rjd/caldav-test-fastmail-probe-url)
          . ,(rjd/caldav-test-fastmail-fixture "declines-expanded.xml"))
@@ -247,14 +247,14 @@ The account has MORE properties, such as :aliases."
 
 (ert-deftest rjd/caldav-declined-by-an-alias-is-left-out ()
   "An event an attendee has declined is left out if the attendee is the
-account's user, or a whole address its :aliases regexp matches,
+account's user, or a whole address its :addresses regexp matches,
 regardless of case."
   (should (equal (rjd/caldav-test-fetch-fastmail-declines
-                  :aliases "[^@+]+\\+[^@]+@example\\.com\\|alias@example\\.org")
+                  :addresses "[^@+]+\\+[^@]+@example\\.com\\|alias@example\\.org")
                  '("Declined by someone else"
                    "Declined by a longer address"))))
 
-(ert-deftest rjd/caldav-without-aliases-only-the-user-s-declines-count ()
+(ert-deftest rjd/caldav-without-addresses-only-the-user-s-declines-count ()
   (should (equal (rjd/caldav-test-fetch-fastmail-declines)
                  '("Declined by plus alias"
                    "Declined by other alias"
@@ -337,6 +337,38 @@ fetches it lasts."
     (should (= (length messages) 1))
     (should (string-search "icloud: " (car messages)))
     (should-not (string-search "fastmail" (car messages)))))
+
+(ert-deftest rjd/caldav-each-account-s-failures-are-reported-once ()
+  "iCloud refuses its password throughout.  Its failure is reported
+once; Fastmail starting to fail is reported too, naming Fastmail only;
+a further failure of either is not; and Fastmail's success re-arms only
+its own report, not iCloud's."
+  (let* ((icloud-refused
+          '((("PROPFIND" . "https://caldav.icloud.com/") . unauthorized)))
+         (fastmail-discovery (butlast rjd/caldav-test-fastmail-responses))
+         (replay (lambda (fastmail-report)
+                   (rjd/caldav-test-replay
+                    (append icloud-refused fastmail-report fastmail-discovery
+                            rjd/caldav-test-discovery)))))
+    (rjd/caldav-test-two-accounts icloud-refused
+        rjd/caldav-test-fastmail-probe-report
+      (rjd/caldav-fetch)
+      (should (= (length messages) 1))
+      (should (string-search "icloud: " (car messages)))
+      (let ((rjd/caldav-request-function (funcall replay nil)))
+        (rjd/caldav-fetch)
+        (should (= (length messages) 2))
+        (should (string-search "fastmail: Probe" (car messages)))
+        (should-not (string-search "icloud" (car messages)))
+        (rjd/caldav-fetch)
+        (should (= (length messages) 2)))
+      (rjd/caldav-fetch)
+      (should (= (length messages) 2))
+      (let ((rjd/caldav-request-function (funcall replay nil)))
+        (rjd/caldav-fetch)
+        (should (= (length messages) 3))
+        (should (string-search "fastmail: Probe" (car messages)))
+        (should-not (string-search "icloud" (car messages)))))))
 
 (ert-deftest rjd/caldav-colliding-file-names-are-refused-across-accounts ()
   "Two accounts whose calendars would share a file are both refused,

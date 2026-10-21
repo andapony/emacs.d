@@ -15,8 +15,10 @@
 ;;
 ;; An account is a plist; see `rjd/caldav-accounts'.  Its name prefixes
 ;; its calendar files, and its password is looked up under its server's
-;; host.  Nothing else is kept per account: the timer and the state of
-;; a fetch are shared, and a fetch takes every account together.  Two
+;; host.  Its failures are reported by account: each account's run of
+;; failing fetches is reported once, naming it, whatever the others do.
+;; Nothing else is kept per account: the timer and the state of a fetch
+;; are shared, and a fetch takes every account together.  Two
 ;; calendars whose files would share a name, in one account or across
 ;; two, are both refused.
 ;;
@@ -57,15 +59,15 @@
 ;; `rjd/caldav--end'.
 ;;
 ;; An event is left out if cancelled, or declined by the account's
-;; user or by any address its :aliases regexp matches, so that a
+;; user or by any address its :addresses regexp matches, so that a
 ;; decline made in Fastmail's own calendar, to an alias, takes effect.
 ;;
 ;; Each password is from auth-source, under the host of the account's
 ;; server and the account's user: `caldav.icloud.com' for iCloud, and
-;; `caldav.fastmail.com' for Fastmail, the entry org-pa's upload reads.  Only
-;; a fetch begun by opening the agenda, or by hand, may prompt for one:
-;; a timer's fetch leaves encrypted sources out, and skips an account
-;; with no password to hand.
+;; `caldav.fastmail.com' for Fastmail, the entry org-pa's upload reads.
+;; Only a fetch begun by opening the agenda, or by hand, may prompt for
+;; one: a timer's fetch leaves encrypted sources out, and skips an
+;; account with no password to hand.
 ;;
 ;; A calendar fed from org is never fetched, whatever its name: its
 ;; events would be copies of org's own.  The fetcher knows one by its
@@ -73,8 +75,13 @@
 ;; org-pa's `org-pa-caldav-url' -- and compared by decoded path, so the
 ;; host's form and an encoded @ do not matter.  org-pa loads lazily, so
 ;; until it has, the URL is the value use-package's `:custom' saved on
-;; the symbol; a form that sets it under `:after' saves nothing until
-;; then, and so guards nothing until then.
+;; the symbol, its `saved-value' property; a form that sets it under
+;; `:after' saves nothing until then, and so guards nothing until then.
+;; This depends on use-package: if it stopped saving `:custom' values
+;; that way, org-pa's calendar would be fetched until org-pa loaded,
+;; and its events would show twice.  If they ever do, `saved-value' on
+;; `org-pa-caldav-url' is the first place to look; see
+;; `rjd/caldav--fed-from-org-urls'.
 ;;
 ;; Nothing is fetched inside a container, so no agent's Emacs holds a
 ;; password; `rjd/caldav-enabled' overrides that.
@@ -127,7 +134,7 @@ Each is a plist:
               calendar is given as (NAME . CATEGORY): a name wider than
               the agenda's category column pushes the rest of the line
               over.
-  :aliases    optionally, a regexp matching, whole and regardless of
+  :addresses  optionally, a regexp matching, whole and regardless of
               case, the account's other addresses -- plus, subdomain
               and catch-all aliases -- as `rjd/mail-accounts' has
               them.  An event declined by an attendee at :user, or at
@@ -150,7 +157,7 @@ otherwise, such as by beorg, is not known to be."
                                    (cons :tag "Display name and category"
                                          (string :tag "Display name")
                                          (string :tag "Category")))))
-                  (:aliases regexp))))
+                  (:addresses regexp))))
   :group 'rjd/caldav)
 
 (defcustom rjd/caldav-directory "~/org-agenda/calendars/"
@@ -217,10 +224,11 @@ Tests replace it.")
 A fetch takes every account together, so this is not per account.")
 
 (defvar rjd/caldav--failing nil
-  "Non-nil once a fetch has failed, until one succeeds.
-A failure is reported only when this was nil, so a run of failing
-timer fetches says so once.  A fetch fails if any account's does, and
-its message names each account that failed.")
+  "The accounts whose failing has been reported, by name.
+An account's failure is reported only when its name is not here, so a
+run of its failing timer fetches says so once, whatever the other
+accounts do; its next success takes it off.  Calendars refused for
+sharing a file are no one account's, and are kept here as nil.")
 
 (defvar rjd/caldav--last-fetch nil
   "When the last fetch began, or nil.")
@@ -233,13 +241,16 @@ again, so without this each fetch would set off the next.")
 
 ;;; Where it runs
 
-(defun rjd/caldav--accounts ()
-  "The accounts in `rjd/caldav-accounts' that have calendars to fetch."
+(defun rjd/caldav--accounts (&optional without-calendars)
+  "The accounts in `rjd/caldav-accounts' that have calendars to fetch.
+That is, those with a :name, a :server, a :user and :calendars; or,
+if WITHOUT-CALENDARS, those with the first three, whether or not
+they name any calendar."
   (seq-filter (lambda (account)
                 (and (plist-get account :name)
                      (plist-get account :server)
                      (plist-get account :user)
-                     (plist-get account :calendars)))
+                     (or without-calendars (plist-get account :calendars))))
               rjd/caldav-accounts))
 
 (defun rjd/caldav--account-host (account)
@@ -290,15 +301,19 @@ emoji."
     (format "%s-%s.org" account-name
             (if (string-empty-p slug) "calendar" slug))))
 
+(defun rjd/caldav--file (account name)
+  "The name of the calendar file of ACCOUNT's calendar called NAME.
+See `rjd/caldav-file-name'."
+  (rjd/caldav-file-name (plist-get account :name) name))
+
 (defun rjd/caldav--write (account name text)
   "Make TEXT the calendar file of ACCOUNT's calendar called NAME.
 Written beside it and renamed over it, so the agenda never reads half
 a file; the temporary name does not end in .org, so the agenda never
 lists it.  A buffer visiting the file is reverted, discarding any edit:
 the file is the calendar's."
-  (let* ((file (expand-file-name
-                (rjd/caldav-file-name (plist-get account :name) name)
-                rjd/caldav-directory))
+  (let* ((file (expand-file-name (rjd/caldav--file account name)
+                                 rjd/caldav-directory))
          (temp (concat file ".part"))
          (coding-system-for-write 'utf-8-unix))
     (write-region text nil temp nil 'silent)
@@ -382,25 +397,25 @@ weeks give, exclusive as a DTEND's is."
               (list (decoded-time-month end) (decoded-time-day end)
                     (decoded-time-year end))))))))
 
-(defun rjd/caldav--own-address-p (account address)
+(defun rjd/caldav--account-address-p (account address)
   "Non-nil if ADDRESS, a bare address, is ACCOUNT's.
-That is its :user, or any whole address its :aliases regexp matches;
+That is its :user, or any whole address its :addresses regexp matches;
 either way regardless of case, as `rjd/mail--address-p' has it."
   (and address
        (or (string-equal-ignore-case address (plist-get account :user))
-           (when-let* ((regexp (plist-get account :aliases)))
+           (when-let* ((regexp (plist-get account :addresses)))
              (let ((case-fold-search t))
                (string-match-p (concat "\\`\\(?:" regexp "\\)\\'")
                                address))))))
 
 (defun rjd/caldav--declined-p (vevent account)
   "Non-nil if one of ACCOUNT's addresses has declined VEVENT.
-See `rjd/caldav--own-address-p'."
+See `rjd/caldav--account-address-p'."
   (seq-some (lambda (attendee)
               (and (equal (icalendar-with-param-of attendee
                               'icalendar-partstatparam)
                           "DECLINED")
-                   (rjd/caldav--own-address-p
+                   (rjd/caldav--account-address-p
                     account
                     (icalendar-strip-mailto
                      (icalendar-ast-node-value
@@ -774,8 +789,7 @@ silently, since the collision is reported once for every account."
   (let (wanted errors)
     (dolist (name (rjd/caldav--names account))
       (let ((calendar (assoc name calendars)))
-        (cond ((member (rjd/caldav-file-name (plist-get account :name) name)
-                       refused))
+        (cond ((member (rjd/caldav--file account name) refused))
               ((and calendar (rjd/caldav--fed-from-org-p (cdr calendar)))
                (push (format "%s is fed from org, so is never fetched" name)
                      errors))
@@ -792,15 +806,23 @@ silently, since the collision is reported once for every account."
       (when (derived-mode-p 'org-agenda-mode)
         (org-agenda-redo t)))))
 
-(defun rjd/caldav--finish (errors)
-  "End a fetch that met ERRORS, a list of messages, nil if none.
-Errors are reported only at the start of a run of failing fetches."
+(defun rjd/caldav--finish (results)
+  "End a fetch whose RESULTS are an alist of (ACCOUNT-NAME . ERRORS).
+ERRORS are messages, nil for an account that succeeded; the
+ACCOUNT-NAME of the collisions is nil.  Each account's errors are
+reported only at the start of its own run of failing fetches; see
+`rjd/caldav--failing'."
   (setq rjd/caldav--fetching nil)
-  (if (not errors)
-      (setq rjd/caldav--failing nil)
-    (unless rjd/caldav--failing
-      (setq rjd/caldav--failing t)
-      (message "rjd-caldav: fetching failed: %s" (string-join errors "; "))))
+  (let (new)
+    (pcase-dolist (`(,account-name . ,errors) results)
+      (cond ((not errors)
+             (setq rjd/caldav--failing
+                   (delete account-name rjd/caldav--failing)))
+            ((not (member account-name rjd/caldav--failing))
+             (push account-name rjd/caldav--failing)
+             (setq new (append new errors)))))
+    (when new
+      (message "rjd-caldav: fetching failed: %s" (string-join new "; "))))
   (rjd/caldav--redo-agendas))
 
 (defun rjd/caldav--fetch-calendars (account calendars refused authorization
@@ -875,19 +897,25 @@ while a fetch runs."
       (pcase-let ((`(,refused . ,collisions)
                    (rjd/caldav--collisions (rjd/caldav--accounts)))
                   (ready nil)
-                  (errors nil))
+                  (results nil))
         (dolist (account (rjd/caldav--accounts))
           (if-let* ((password (rjd/caldav--password account may-prompt)))
               (push (cons account (rjd/caldav--authorization account password))
                     ready)
-            (push (format "%s: %s" (plist-get account :name)
-                          (rjd/caldav--no-password account))
-                  errors)))
+            (let ((name (plist-get account :name)))
+              (push (list name (format "%s: %s" name
+                                       (rjd/caldav--no-password account)))
+                    results))))
         (setq ready (nreverse ready)
-              errors (append collisions (and interactive (nreverse errors))))
+              results (cons (cons nil collisions)
+                            (and interactive (nreverse results))))
         (if (null ready)
             (when interactive
-              (user-error "%s" (string-join errors "; ")))
+              (user-error "%s" (string-join (mapcan (lambda (result)
+                                                      (copy-sequence
+                                                       (cdr result)))
+                                                    results)
+                                            "; ")))
           (let ((pending (length ready)))
             (setq rjd/caldav--fetching t
                   rjd/caldav--last-fetch (current-time))
@@ -897,21 +925,20 @@ while a fetch runs."
               (rjd/caldav--fetch-account
                account refused authorization
                (lambda (account-errors)
-                 (setq errors (append errors account-errors))
+                 (setq results (append results
+                                       (list (cons (plist-get account :name)
+                                                   account-errors))))
                  (when (zerop (setq pending (1- pending)))
-                   (rjd/caldav--finish errors))))))))))))
+                   (rjd/caldav--finish results))))))))))))
 
 ;;;###autoload
 (defun rjd/caldav-list-calendars (account)
   "Show the display names of ACCOUNT's calendars.
-Interactively, ACCOUNT is asked for by name, among the accounts in
-`rjd/caldav-accounts' with a user, unless there is just one."
+Interactively, ACCOUNT is asked for by name, unless there is just one,
+among the accounts in `rjd/caldav-accounts' with a name, a server and
+a user, whether or not they name any calendars yet."
   (interactive
-   (let ((accounts (seq-filter (lambda (account)
-                                 (and (plist-get account :name)
-                                      (plist-get account :server)
-                                      (plist-get account :user)))
-                               rjd/caldav-accounts)))
+   (let ((accounts (rjd/caldav--accounts t)))
      (list (cond ((null accounts)
                   (user-error "No account in `rjd/caldav-accounts'"))
                  ((null (cdr accounts)) (car accounts))

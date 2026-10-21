@@ -133,10 +133,10 @@
 ;; alias.  The #20 advice finds the replier through the same
 ;; identities, so the reply still answers for that attendee alone.  It
 ;; goes to the organiser by mail only, as before; nothing is written to
-;; any calendar, to org or to the diary.  If `gnus-icalendar-identities' is renamed, or
-;; the attendee lookup stops accepting predicates, such invitations
-;; silently lose their buttons again -- so if an invitation to an
-;; alias shows none, look here first.
+;; any calendar, to org or to the diary.  If `gnus-icalendar-identities'
+;; is renamed, or the attendee lookup stops accepting predicates, such
+;; invitations silently lose their buttons again -- so if an invitation
+;; to an alias shows none, look here first.
 ;;
 ;; Enable with `rjd/mail-mode', once mu4e has loaded.
 

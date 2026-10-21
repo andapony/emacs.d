@@ -9,8 +9,9 @@
 # where discovery starts -- Fastmail's, say:
 # CALDAV_SERVER=https://caldav.fastmail.com/dav/.  The password is read
 # from the ~/.authinfo line whose machine is that URL's host
-# (caldav.icloud.com for iCloud) -- the first such line, whatever its
-# login -- or asked for.  Responses go to OUTDIR, by default
+# (caldav.icloud.com for iCloud) and whose login is USER, as rjd-caldav
+# looks it up -- never another login's line for the same host, such as
+# another Fastmail address's -- or asked for.  Responses go to OUTDIR, by default
 # ~/tmp/caldav-probe -- outside this public repository, since they hold
 # real event data and account IDs.  Sanitise before copying any into
 # test/fixtures/caldav/.
@@ -28,9 +29,15 @@ host=$(echo "$server" | sed -E 's|^https?://([^/]*).*|\1|')
 origin=https://$host
 mkdir -p "$out"
 
-pass=$(awk -v host="$host" '$1 == "machine" && $2 == host {
-              for (i = 3; i < NF; i++) if ($i == "password") print $(i + 1) }' \
-           "$HOME/.authinfo" 2>/dev/null | head -n 1)
+pass=$(awk -v host="$host" -v user="$user" '{
+              machine = login = password = ""
+              for (i = 1; i < NF; i += 2) {
+                if ($i == "machine") machine = $(i + 1)
+                else if ($i == "login") login = $(i + 1)
+                else if ($i == "password") password = $(i + 1)
+              }
+              if (machine == host && login == user && password != "") print password
+            }' "$HOME/.authinfo" 2>/dev/null | head -n 1)
 if [ -z "$pass" ]; then
   printf 'Password for %s at %s: ' "$user" "$host" >&2
   stty -echo; read -r pass; stty echo; echo >&2

@@ -35,8 +35,8 @@ _Avoid_: invitation calendar
 
 **CalDAV account**:
 An account on a CalDAV server whose calendars are fetched, such as the
-user's iCloud or Fastmail account: a server, a user and the calendars
-named in `private.el`.  Its name begins each of its calendar files' names.
+user's iCloud or Fastmail account: a server, a user, the calendars
+named in `private.el`, and optionally the user's other addresses.  Its name begins each of its calendar files' names.
 _Avoid_: source, provider
 
 **Agenda export**:

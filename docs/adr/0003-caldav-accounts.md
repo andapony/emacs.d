@@ -45,8 +45,9 @@ starts cleanly.
 - `:user`, the account's address;
 - `:calendars`, by display name, each optionally `(NAME . CATEGORY)`,
   as before;
-- optionally `:aliases`, a regexp matched against whole addresses
-  regardless of case, as `rjd-mail`'s `:addresses` is.  An event is
+- optionally `:addresses`, a regexp matched against whole addresses
+  regardless of case, as `rjd-mail`'s `:addresses` is, and named the
+  same since it is the same regexp.  An event is
   left out as declined when an attendee who has declined it is the
   account's user or an address this matches, so a decline made in
   Fastmail's own calendar, to an alias, takes effect.
@@ -66,16 +67,20 @@ hyphen in it meets a calendar's slug.  Calendars whose files would
 collide are all refused, across accounts as within one, and the
 collision is reported once.
 
-**One shared fetch state.**  The timer, the guard against two fetches
-at once, the time of the last fetch and the failing flag are kept once,
-not per account; nothing else is kept between fetches, per account or
-at all.  A fetch takes every account together: each account's password
-is looked up separately, and one with no password to hand is skipped
--- silently from a timer, reported when the fetch was begun by hand.
-The accounts are fetched side by side, the fetch finishing when all
-have, so one account's outage does not stop another's.  Errors are
-collected per account, each named by its account, and a run of failing
-fetches is still reported once.  The agenda is redone at the end.
+**One shared fetch state, but failures by account.**  The timer, the
+guard against two fetches at once and the time of the last fetch are
+kept once, not per account; the only thing kept per account between
+fetches is whether its failing has been reported.  A fetch takes every
+account together: each account's password is looked up separately,
+and one with no password to hand is skipped -- silently from a timer,
+reported when the fetch was begun by hand.  The accounts are fetched
+side by side, the fetch finishing when all have, so one account's
+outage does not stop another's.  Errors are collected per account,
+each named by its account, and each account's run of failing fetches
+is reported once, independently of the others: an account that starts
+failing while another already is still gets reported, and an
+account's success re-arms only its own report.  The agenda is redone
+at the end.
 
 **A refused password is told apart where the account is known.**  The
 request function knows only a URL and a header, so it reports a 401 as
