@@ -14,6 +14,13 @@
 ;; for events that give a DURATION rather than a DTEND.  The iCloud
 ;; account is declared by `rjd/caldav-test-icloud'.
 ;;
+;; Fastmail's (fixtures/caldav/fastmail/): the four responses its probe
+;; recorded, its expansion in probe-expanded.xml being of a weekly
+;; event with one occurrence moved and one deleted, every event with a
+;; DURATION and in UTC.  declines-expanded.xml is made by hand in the
+;; same shape, for declines by aliases.  The account is declared by
+;; `rjd/caldav-test-fastmail'.
+;;
 ;; Times are checked in a fixed local zone, set by
 ;; `rjd/caldav-test-in-zone', so the results do not depend on the
 ;; machine's.
@@ -130,6 +137,220 @@ comes from a stub, so auth-source is never asked."
   "The reply to the Probe calendar's REPORT.")
 
 
+;;; Fastmail
+
+(defun rjd/caldav-test-fastmail-fixture (name)
+  "The absolute file name of Fastmail's fixture NAME.
+Absolute, so that `rjd/caldav-test-replay' finds it whatever directory
+it resolves iCloud's against."
+  (expand-file-name name (expand-file-name "../fastmail/"
+                                           rjd/caldav-test-fixtures)))
+
+(defun rjd/caldav-test-fastmail (calendars &rest more)
+  "The Fastmail account, as `rjd/caldav-accounts' declares it.
+With CALENDARS, and MORE properties, such as :aliases."
+  (append (list :name "fastmail"
+                :server "https://caldav.fastmail.com/dav/"
+                :user "user@example.com"
+                :calendars calendars)
+          more))
+
+(defconst rjd/caldav-test-fastmail-home
+  "https://caldav.fastmail.com/dav/calendars/user/user@example.com/"
+  "Fastmail's calendar home in the recorded responses.")
+
+(defconst rjd/caldav-test-fastmail-probe-url
+  (concat rjd/caldav-test-fastmail-home "PROBE-CALENDAR/")
+  "Fastmail's Probe calendar's URL in the recorded responses.")
+
+(defconst rjd/caldav-test-fastmail-responses
+  `((("PROPFIND" . "https://caldav.fastmail.com/dav/")
+     . ,(rjd/caldav-test-fastmail-fixture "principal.xml"))
+    (("PROPFIND"
+      . "https://caldav.fastmail.com/dav/principals/user/user@example.com/")
+     . ,(rjd/caldav-test-fastmail-fixture "home-set.xml"))
+    (("PROPFIND" . ,rjd/caldav-test-fastmail-home)
+     . ,(rjd/caldav-test-fastmail-fixture "calendars.xml"))
+    (("REPORT" . ,rjd/caldav-test-fastmail-probe-url)
+     . ,(rjd/caldav-test-fastmail-fixture "probe-expanded.xml")))
+  "The replies to Fastmail's discovery and its Probe calendar's REPORT.")
+
+(defun rjd/caldav-test-fetch-fastmail-probe (zone)
+  "Fastmail's Probe calendar file, fetched with local time ZONE."
+  (rjd/caldav-test-fetching nil rjd/caldav-test-fastmail-responses
+    (rjd/caldav-test-in-zone zone
+      (let ((rjd/caldav-accounts (list (rjd/caldav-test-fastmail '("Probe")))))
+        (rjd/caldav-fetch))
+      (should-not messages)
+      (should-not (rjd/caldav-test-file dir "Probe"))
+      (let ((file (expand-file-name "fastmail-probe.org" dir)))
+        (should (file-exists-p file))
+        (with-temp-buffer
+          (insert-file-contents file)
+          (buffer-string))))))
+
+(ert-deftest rjd/caldav-fastmail-probe-occurrences-have-their-ends ()
+  "Fastmail's expansion: four occurrences, the moved one at its new time
+and the deleted one absent, each an hour long by its DURATION.  Times
+are in UTC; Los Angeles leaves summer time on 1 November."
+  (should (string-suffix-p
+           (concat "\n\n"
+                   "* Test\n<2026-10-26 Mon 09:00-10:00>\n"
+                   "* Test\n<2026-11-02 Mon 09:00-10:00>\n"
+                   "* Test\n<2026-11-09 Mon 14:00-15:00>\n"
+                   "* Test\n<2026-11-23 Mon 09:00-10:00>\n")
+           (rjd/caldav-test-fetch-fastmail-probe "America/Los_Angeles"))))
+
+(ert-deftest rjd/caldav-fastmail-probe-occurrences-in-london ()
+  "The same occurrences from London, which leaves summer time on 25
+October, before the first."
+  (should (string-suffix-p
+           (concat "\n\n"
+                   "* Test\n<2026-10-26 Mon 16:00-17:00>\n"
+                   "* Test\n<2026-11-02 Mon 17:00-18:00>\n"
+                   "* Test\n<2026-11-09 Mon 22:00-23:00>\n"
+                   "* Test\n<2026-11-23 Mon 17:00-18:00>\n")
+           (rjd/caldav-test-fetch-fastmail-probe "Europe/London"))))
+
+(ert-deftest rjd/caldav-list-calendars-shows-fastmail-s-calendars ()
+  "Display names arrive as CDATA, and read as plain text.  The scheduling
+inbox and outbox, and the home with its own display name, are not
+calendars; the to-do list is typed as one, so is listed."
+  (rjd/caldav-test-fetching nil rjd/caldav-test-fastmail-responses
+    (rjd/caldav-list-calendars (rjd/caldav-test-fastmail '("Probe")))
+    (should (equal messages
+                   '("fastmail calendars: Calendar, org-pa, Probe, \
+DEFAULT_TASK_CALENDAR_NAME")))
+    (should (equal (mapcar #'car rjd/caldav-test-requests)
+                   '("PROPFIND" "PROPFIND" "PROPFIND")))))
+
+(defun rjd/caldav-test-fetch-fastmail-declines (&rest more)
+  "Fastmail's Probe calendar file, fetched from declines-expanded.xml.
+The account has MORE properties, such as :aliases."
+  (rjd/caldav-test-fetching nil
+      `((("REPORT" . ,rjd/caldav-test-fastmail-probe-url)
+         . ,(rjd/caldav-test-fastmail-fixture "declines-expanded.xml"))
+        ,@rjd/caldav-test-fastmail-responses)
+    (let ((rjd/caldav-accounts
+           (list (apply #'rjd/caldav-test-fastmail '("Probe") more))))
+      (rjd/caldav-fetch))
+    (should-not messages)
+    (with-temp-buffer
+      (insert-file-contents (expand-file-name "fastmail-probe.org" dir))
+      (let (summaries)
+        (while (re-search-forward "^\\* \\(.*\\)$" nil t)
+          (push (match-string 1) summaries))
+        (nreverse summaries)))))
+
+(ert-deftest rjd/caldav-declined-by-an-alias-is-left-out ()
+  "An event an attendee has declined is left out if the attendee is the
+account's user, or a whole address its :aliases regexp matches,
+regardless of case."
+  (should (equal (rjd/caldav-test-fetch-fastmail-declines
+                  :aliases "[^@+]+\\+[^@]+@example\\.com\\|alias@example\\.org")
+                 '("Declined by someone else"
+                   "Declined by a longer address"))))
+
+(ert-deftest rjd/caldav-without-aliases-only-the-user-s-declines-count ()
+  (should (equal (rjd/caldav-test-fetch-fastmail-declines)
+                 '("Declined by plus alias"
+                   "Declined by other alias"
+                   "Declined by someone else"
+                   "Declined by a longer address"))))
+
+
+;;; Several accounts
+
+(defmacro rjd/caldav-test-two-accounts (icloud-responses fastmail-responses
+                                                         &rest body)
+  "Run BODY fetching iCloud's and Fastmail's Probe calendars together.
+ICLOUD-RESPONSES and FASTMAIL-RESPONSES are added to each account's
+discovery replies.  Each account's password is its name and \"-pw\".
+`dir' and `messages' are as in `rjd/caldav-test-fetching'."
+  (declare (indent 2))
+  `(rjd/caldav-test-fetching nil
+       (append ,icloud-responses ,fastmail-responses
+               (butlast rjd/caldav-test-fastmail-responses))
+     (let ((rjd/caldav-accounts (list (rjd/caldav-test-icloud '("Probe"))
+                                      (rjd/caldav-test-fastmail '("Probe")))))
+       (cl-letf (((symbol-function 'rjd/caldav--password)
+                  (lambda (account &optional _may-prompt)
+                    (concat (plist-get account :name) "-pw"))))
+         ,@body))))
+
+(defconst rjd/caldav-test-fastmail-probe-report
+  (last rjd/caldav-test-fastmail-responses)
+  "The reply to Fastmail's Probe calendar's REPORT.")
+
+(ert-deftest rjd/caldav-both-accounts-write-their-files ()
+  (rjd/caldav-test-two-accounts rjd/caldav-test-probe-report
+      rjd/caldav-test-fastmail-probe-report
+    (rjd/caldav-fetch)
+    (should (string-prefix-p "#+CATEGORY: Probe\n"
+                             (rjd/caldav-test-file dir "Probe")))
+    (should (file-exists-p (expand-file-name "fastmail-probe.org" dir)))
+    (should-not messages)
+    (should-not rjd/caldav--fetching)))
+
+(ert-deftest rjd/caldav-every-request-reads-with-its-own-account-s-password ()
+  "Every request, to either account, is a PROPFIND or a REPORT, and
+carries the credentials of the account whose server it goes to."
+  (rjd/caldav-test-two-accounts rjd/caldav-test-probe-report
+      rjd/caldav-test-fastmail-probe-report
+    (rjd/caldav-fetch)
+    (should (= (length rjd/caldav-test-requests) 8))
+    (dolist (request rjd/caldav-test-requests)
+      (should (member (car request) '("PROPFIND" "REPORT")))
+      (should (equal (nth 2 request)
+                     (concat "Basic "
+                             (base64-encode-string
+                              (if (string-prefix-p "https://caldav.fastmail.com/"
+                                                   (nth 1 request))
+                                  "user@example.com:fastmail-pw"
+                                "user@example.com:icloud-pw")
+                              t)))))))
+
+(ert-deftest rjd/caldav-one-account-failing-leaves-the-other-s-file ()
+  "Fastmail's REPORT fails: iCloud's file is still written, and the
+failure is reported once, naming Fastmail and not iCloud, however many
+fetches it lasts."
+  (rjd/caldav-test-two-accounts rjd/caldav-test-probe-report nil
+    (rjd/caldav-fetch)
+    (rjd/caldav-fetch)
+    (should (rjd/caldav-test-file dir "Probe"))
+    (should-not (file-exists-p (expand-file-name "fastmail-probe.org" dir)))
+    (should (= (length messages) 1))
+    (should (string-search "fastmail: Probe" (car messages)))
+    (should-not (string-search "icloud" (car messages)))))
+
+(ert-deftest rjd/caldav-the-other-account-failing-leaves-fastmail-s-file ()
+  "iCloud refuses its password: Fastmail's file is still written."
+  (rjd/caldav-test-two-accounts
+      '((("PROPFIND" . "https://caldav.icloud.com/") . unauthorized))
+      rjd/caldav-test-fastmail-probe-report
+    (rjd/caldav-fetch)
+    (should-not (rjd/caldav-test-file dir "Probe"))
+    (should (file-exists-p (expand-file-name "fastmail-probe.org" dir)))
+    (should (= (length messages) 1))
+    (should (string-search "icloud: " (car messages)))
+    (should-not (string-search "fastmail" (car messages)))))
+
+(ert-deftest rjd/caldav-colliding-file-names-are-refused-across-accounts ()
+  "Two accounts whose calendars would share a file are both refused,
+and neither calendar is asked for its events."
+  (rjd/caldav-test-two-accounts rjd/caldav-test-probe-report
+      rjd/caldav-test-fastmail-probe-report
+    (let ((rjd/caldav-accounts
+           (list (plist-put (rjd/caldav-test-icloud '("Probe")) :name "fastmail")
+                 (rjd/caldav-test-fastmail '("probe!")))))
+      (rjd/caldav-fetch))
+    (should-not (file-exists-p (expand-file-name "fastmail-probe.org" dir)))
+    (should-not (seq-some (lambda (request) (equal (car request) "REPORT"))
+                          rjd/caldav-test-requests))
+    (should (= (length messages) 1))
+    (should (string-search "fastmail-probe.org" (car messages)))))
+
+
 ;;; File names
 
 (ert-deftest rjd/caldav-file-name-is-the-account-and-a-slug-of-the-name ()
@@ -178,7 +399,7 @@ inbox, outbox and notification collections are not calendars."
   "The org entries for the events in FIXTURE, as strings."
   (mapcar #'rjd/caldav--org-entry
           (rjd/caldav--events (rjd/caldav-test-dom fixture)
-                              "user@example.com")))
+                              (rjd/caldav-test-icloud nil))))
 
 (ert-deftest rjd/caldav-probe-occurrences-are-each-an-entry ()
   "iCloud's expansion: five occurrences, the moved one at its new time."
@@ -237,7 +458,7 @@ the 08:00 call would move."
   (when (get-buffer "*Warnings*") (kill-buffer "*Warnings*"))
   (should-not (rjd/caldav--calendar-events
                "BEGIN:VCALENDAR\nBEGIN:VEVENT\nDTSTART:garbage\n"
-               "user@example.com"))
+               (rjd/caldav-test-icloud nil)))
   (should-not (get-buffer "*Warnings*")))
 
 (ert-deftest rjd/caldav-a-heading-like-summary-stays-one-heading ()

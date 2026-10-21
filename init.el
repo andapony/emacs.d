@@ -852,7 +852,7 @@ copies."
   (rjd/gcal-file (file-name-concat rjd/calendar-directory
                                    "gcal-gmail-personal.org")))
 
-;; CalDAV calendars, iCloud's among them, read-only, in the agenda:
+;; CalDAV calendars, iCloud's and Fastmail's, read-only, in the agenda:
 ;; rjd-caldav, a local package in user-lisp/, fetches each over CalDAV
 ;; into its own file in the calendar directory.  docs/adr/0002 and 0003
 ;; have the reasons.  The accounts, each with its server, user and

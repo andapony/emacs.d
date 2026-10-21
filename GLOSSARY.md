@@ -27,10 +27,16 @@ machine.  Not everything Calendar.app shows is one: Google calendars
 and `.ics` subscriptions it displays are not.
 _Avoid_: Apple calendar, Calendar.app calendar
 
+**Fastmail calendar**:
+A calendar stored in the user's Fastmail account, such as its default
+"Calendar", where Fastmail adds incoming invitations.  org-pa's
+calendar there is one too, but is fed from org, so is never fetched.
+_Avoid_: invitation calendar
+
 **CalDAV account**:
 An account on a CalDAV server whose calendars are fetched, such as the
-user's iCloud account: a server, a user and the calendars named in
-`private.el`.  Its name begins each of its calendar files' names.
+user's iCloud or Fastmail account: a server, a user and the calendars
+named in `private.el`.  Its name begins each of its calendar files' names.
 _Avoid_: source, provider
 
 **Agenda export**:

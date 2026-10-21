@@ -204,22 +204,28 @@ hooks, and `rjd/gcal-mode` is opt-in, enabled from org-agenda's form in
 calls org-gcal's sync, only its fetch.  ERT tests:
 `test/rjd-gcal-test.el`.
 
-CalDAV calendars, iCloud's among them, reach the agenda through
+CalDAV calendars, iCloud's and Fastmail's, reach the agenda through
 `rjd-caldav` (user-lisp).  `private.el` declares its accounts as
 `rjd/caldav-accounts`, each a plist of a name, a CalDAV server URL, a
-user and the calendars to fetch, by display name.  Each calendar is
-fetched into `NAME-SLUG.org` (so iCloud's are `icloud-SLUG.org`),
-rewriting the file whole after each successful fetch.  It only ever
-sends PROPFIND and REPORT: each password, from auth-source under its
-server's host (`caldav.icloud.com` for iCloud) and the account's user,
-could write, so read-only rests on the code.  The accounts are fetched
+user, the calendars to fetch, by display name, and optionally an
+aliases regexp, whose declines count as the user's.  Each calendar is
+fetched into `NAME-SLUG.org` (so iCloud's are `icloud-SLUG.org`, and
+Fastmail's `fastmail-SLUG.org`), rewriting the file whole after each
+successful fetch; calendars whose files would collide, across accounts
+as within one, are refused.  It only ever sends PROPFIND and REPORT:
+each password, from auth-source under its server's host
+(`caldav.icloud.com`, `caldav.fastmail.com`) and the account's user,
+could write -- Fastmail's is the very entry org-pa uploads with -- so
+read-only rests on the code.  The accounts are fetched
 together, one failing without stopping another, and failures are
 reported once per run, naming the account.  Recurrences are expanded by
 the server, not here, and iCloud sends each time in its event's TZID
 with no VTIMEZONE, which `rjd-caldav` resolves from the system's zone
-database.  **If the iCloud calendars disappear from the agenda, or
-their times shift, those two iCloud behaviours are the first place to
-look**; `test/caldav-probe.sh`, run on the host, shows what a server
+database.  Fastmail sends UTC, but gives every event's length as a
+DURATION, not a DTEND.  **If the iCloud calendars disappear from the
+agenda, or their times shift, those two iCloud behaviours are the
+first place to look; if Fastmail's events lose their end times, its
+DURATION is**; `test/caldav-probe.sh`, run on the host, shows what a server
 now sends (iCloud's by default, any other named in `CALDAV_SERVER`),
 and `rjd-caldav.el`'s commentary has the rest.  Nothing is fetched
 inside a container, so no agent's Emacs holds a password, and a

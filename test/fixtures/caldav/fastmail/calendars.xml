@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<d:multistatus xmlns:d="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CS="http://calendarserver.org/ns/">
+  <d:response>
+    <d:href>/dav/calendars/user/user@example.com/</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:displayname><![CDATA[Example User]]></d:displayname>
+        <d:resourcetype>
+          <d:collection/>
+        </d:resourcetype>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>/dav/calendars/user/user@example.com/DEFAULT-CALENDAR/</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:displayname><![CDATA[Calendar]]></d:displayname>
+        <d:resourcetype>
+          <d:collection/>
+          <C:calendar/>
+        </d:resourcetype>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>/dav/calendars/user/user@example.com/ORG-PA-CALENDAR/</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:displayname><![CDATA[org-pa]]></d:displayname>
+        <d:resourcetype>
+          <d:collection/>
+          <C:calendar/>
+        </d:resourcetype>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>/dav/calendars/user/user@example.com/PROBE-CALENDAR/</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:displayname><![CDATA[Probe]]></d:displayname>
+        <d:resourcetype>
+          <d:collection/>
+          <C:calendar/>
+        </d:resourcetype>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>/dav/calendars/user/user@example.com/TASKS-CALENDAR/</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:displayname><![CDATA[DEFAULT_TASK_CALENDAR_NAME]]></d:displayname>
+        <d:resourcetype>
+          <d:collection/>
+          <C:calendar/>
+        </d:resourcetype>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>/dav/calendars/user/user@example.com/Inbox/</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:displayname><![CDATA[Inbox]]></d:displayname>
+        <d:resourcetype>
+          <d:collection/>
+          <C:schedule-inbox/>
+        </d:resourcetype>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>/dav/calendars/user/user@example.com/Outbox/</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:displayname><![CDATA[Outbox]]></d:displayname>
+        <d:resourcetype>
+          <d:collection/>
+          <C:schedule-outbox/>
+        </d:resourcetype>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+</d:multistatus>

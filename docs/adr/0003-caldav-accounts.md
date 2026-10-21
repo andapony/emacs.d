@@ -44,11 +44,15 @@ starts cleanly.
   (`https://caldav.icloud.com/`);
 - `:user`, the account's address;
 - `:calendars`, by display name, each optionally `(NAME . CATEGORY)`,
-  as before.
+  as before;
+- optionally `:aliases`, a regexp matched against whole addresses
+  regardless of case, as `rjd-mail`'s `:addresses` is.  An event is
+  left out as declined when an attendee who has declined it is the
+  account's user or an address this matches, so a decline made in
+  Fastmail's own calendar, to an alias, takes effect.
 
 An account without a user or calendars is not fetched.  Further keys
-are added as accounts need them; #49 plans an optional aliases regexp,
-for telling declined events.
+are added as accounts need them.
 
 **The auth-source host is the server URL's host**, with the account's
 user as login, so iCloud's stays `caldav.icloud.com` and no host is
@@ -57,7 +61,10 @@ written down twice.
 **Calendar file names** are the account's name, a hyphen, and
 ADR-0002's slug of the display name.  iCloud's files keep their names
 (`icloud-SLUG.org`), and another account's cannot clash with them
-unless the two accounts share a name.
+unless the two accounts share a name, or an account's name with a
+hyphen in it meets a calendar's slug.  Calendars whose files would
+collide are all refused, across accounts as within one, and the
+collision is reported once.
 
 **One shared fetch state.**  The timer, the guard against two fetches
 at once, the time of the last fetch and the failing flag are kept once,
@@ -80,6 +87,54 @@ account's user, its auth-source host, and `auth-source-forget-all-cached`.
 `~/.authinfo` machine, and prints display names by their string value,
 so a CDATA section comes out as the plain name.  Fixtures move to
 `test/fixtures/caldav/`, one directory per server.
+
+
+## Fastmail
+
+Fastmail is the second account, so that the calendar it adds incoming
+invitations to (its default calendar, "Calendar") reaches the agenda.
+Its `:server` is the `/dav/` root on its CalDAV host,
+`https://caldav.fastmail.com/dav/`.
+
+**What the probe found**, on the iMac on 2026-10-20, recorded in
+`test/fixtures/caldav/fastmail/` with the address and every UUID
+replaced:
+
+- Discovery is standard: the principal, calendar home and calendar list
+  come back in the shapes iCloud's do.  Display names arrive as CDATA,
+  which Emacs's XML parser reads as plain text.
+- The scheduling inbox and outbox are typed as such, not as calendars,
+  and the home collection has a display name but no calendar type, so
+  the existing type check leaves all three out.
+- A to-do list collection is typed as a calendar.  It holds no events,
+  so naming it would fetch an empty calendar file.
+- With server-side expansion, a weekly event of five occurrences, one
+  moved and one deleted, came back as four events, the moved one at its
+  new time and the deleted one absent, with no RRULE or EXDATE left.
+  The first occurrence carries no RECURRENCE-ID; nothing depends on it.
+- Every time is in UTC, as RFC 4791 asks, and was right across the 1
+  November change.  iCloud's TZID handling is not needed, and does no
+  harm.
+- Every event gives its length as `DURATION`, with no `DTEND`.  Without
+  reading `DURATION` every Fastmail event would have had no end; that
+  was the one change Fastmail's data needed.
+- Fastmail adds a vendor property, `X-JMAP-USEDEFAULTALERTS`, which the
+  parser ignores.
+
+**The password is org-pa's.**  org-pa's CalDAV upload already reads its
+password from auth-source under `caldav.fastmail.com`, with the account
+address as login, which is the host and user the fetcher derives from
+the account.  So no new app password is made, and the one entry serves
+both.  That password can write -- org-pa clears and re-uploads its
+calendar with it, and Fastmail scopes app passwords by service
+(Calendars), not by read and write -- so read-only for Fastmail rests
+wholly on the fetcher sending only PROPFIND and REPORT.
+
+Where the entry sits in `~/.authinfo.gpg`, a timer's fetch skips
+Fastmail rather than prompt, and it is fetched only on agenda open or
+by hand.  Moving the line into the plain `~/.authinfo` (mode 600), as
+ADR-0002 recommends for iCloud, gives timer fetches.  That is each
+machine's choice; the code is the same either way.
 
 
 ## Consequences
