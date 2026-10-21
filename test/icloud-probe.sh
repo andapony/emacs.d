@@ -5,8 +5,12 @@
 #
 # Usage: test/icloud-probe.sh APPLE-ID CALENDAR-NAME [OUTDIR]
 #
+# Another CalDAV server is probed by naming it in CALDAV_SERVER, such as
+# Fastmail's: CALDAV_SERVER=https://caldav.fastmail.com/dav/.  Its host
+# is then the authinfo machine too.
+#
 # The app-specific password is read from the `machine caldav.icloud.com'
-# line of ~/.authinfo, or asked for.  Responses go to OUTDIR, by default
+# line of ~/.authinfo, or the server's, or asked for.  Responses go to OUTDIR, by default
 # ~/tmp/icloud-probe -- outside this public repository, since they hold
 # real event data and account IDs.  Sanitise before copying any into
 # test/.
@@ -19,9 +23,12 @@ set -eu
 user=$1
 calendar=$2
 out=${3:-$HOME/tmp/icloud-probe}
+server=${CALDAV_SERVER:-https://caldav.icloud.com/}
+host=$(echo "$server" | sed -E 's|^https?://([^/]*).*|\1|')
+origin=https://$host
 mkdir -p "$out"
 
-pass=$(awk '$1 == "machine" && $2 == "caldav.icloud.com" {
+pass=$(awk -v host="$host" '$1 == "machine" && $2 == host {
               for (i = 3; i < NF; i++) if ($i == "password") print $(i + 1) }' \
            "$HOME/.authinfo" 2>/dev/null | head -n 1)
 if [ -z "$pass" ]; then
@@ -45,16 +52,16 @@ absolute() {
   case $2 in http*) echo "$2" ;; *) echo "$1$2" ;; esac
 }
 
-dav PROPFIND https://caldav.icloud.com/ 0 \
+dav PROPFIND "$server" 0 \
   '<d:propfind xmlns:d="DAV:"><d:prop><d:current-user-principal/></d:prop></d:propfind>' \
   "$out/1-principal.xml"
 principal=$(href "$out/1-principal.xml" "//*[local-name()='current-user-principal']")
 echo "principal: $principal"
 
-dav PROPFIND "$(absolute https://caldav.icloud.com "$principal")" 0 \
+dav PROPFIND "$(absolute "$origin" "$principal")" 0 \
   '<d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:prop><c:calendar-home-set/></d:prop></d:propfind>' \
   "$out/2-home-set.xml"
-home=$(absolute https://caldav.icloud.com \
+home=$(absolute "$origin" \
          "$(href "$out/2-home-set.xml" "//*[local-name()='calendar-home-set']")")
 echo "home set: $home"
 
@@ -68,7 +75,7 @@ xmllint --xpath "//*[local-name()='displayname']/text()" "$out/3-calendars.xml" 
 path=$(xmllint --xpath "string(//*[local-name()='response'][.//*[local-name()='displayname']='$calendar']/*[local-name()='href'])" \
          "$out/3-calendars.xml")
 [ -n "$path" ] || { echo "no calendar named '$calendar'" >&2; exit 1; }
-url=$(absolute "${home%%/[0-9]*}" "$path")
+url=$(absolute "$(echo "$home" | sed -E 's|^(https?://[^/]*).*|\1|')" "$path")
 echo "calendar: $url"
 
 start=$(date -u -v-30d +%Y%m%dT000000Z 2>/dev/null || date -u -d '-30 days' +%Y%m%dT000000Z)
