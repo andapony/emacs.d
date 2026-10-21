@@ -64,7 +64,10 @@
 ;;
 ;; Each password is from auth-source, under the host of the account's
 ;; server and the account's user: `caldav.icloud.com' for iCloud, and
-;; `caldav.fastmail.com' for Fastmail, the entry org-pa's upload reads.
+;; `caldav.fastmail.com' for Fastmail.  The host may carry the port, as
+;; `caldav.fastmail.com:443': url.el's Basic auth, which org-pa's upload
+;; relies on, looks the password up that way, so the entry it reads is
+;; found here too.  The bare host is tried first.
 ;; Only a fetch begun by opening the agenda, or by hand, may prompt for
 ;; one: a timer's fetch leaves encrypted sources out, and skips an
 ;; account with no password to hand.
@@ -537,14 +540,20 @@ is indented, so no line of it can start a heading of its own."
 (defun rjd/caldav--password (account &optional may-prompt)
   "ACCOUNT's password, or nil.
 It is filed in auth-source under the host of the account's server and
-its user.  Unless MAY-PROMPT, encrypted sources are not read, so
-nothing can ask for a passphrase; a password auth-source already
-remembers is still found."
+its user -- or under HOST:PORT, as url.el's Basic auth looks it up, so
+the entry org-pa's upload reads serves here too.  The bare host comes
+first.  Unless MAY-PROMPT, encrypted sources are not read, so nothing
+can ask for a passphrase; a password auth-source already remembers is
+still found."
   (let ((auth-sources (if may-prompt
                           auth-sources
-                        (rjd/caldav--quiet-auth-sources))))
-    (auth-source-pick-first-password :host (rjd/caldav--account-host account)
-                                     :user (plist-get account :user))))
+                        (rjd/caldav--quiet-auth-sources)))
+        (host (rjd/caldav--account-host account))
+        (port (url-port (url-generic-parse-url (plist-get account :server)))))
+    (seq-some (lambda (host)
+                (auth-source-pick-first-password :host host
+                                                 :user (plist-get account :user)))
+              (list host (format "%s:%s" host port)))))
 
 (defun rjd/caldav--no-password (account)
   "The message for ACCOUNT having no password in auth-source."
@@ -952,8 +961,11 @@ a user, whether or not they name any calendars yet."
                                   (equal (plist-get account :name) name))
                                 accounts)))))))
   (let ((password (or (rjd/caldav--password account t)
-                      (user-error "%s" (capitalize (rjd/caldav--no-password
-                                                    account)))))
+                      (let ((message (rjd/caldav--no-password account)))
+                        ;; Only the first letter: `capitalize' would
+                        ;; mangle the address and the host too.
+                        (user-error "%s%s" (upcase (substring message 0 1))
+                                    (substring message 1)))))
         (name (plist-get account :name)))
     (rjd/caldav--discover
      account (rjd/caldav--authorization account password)

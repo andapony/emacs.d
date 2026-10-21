@@ -948,6 +948,49 @@ user, from auth-source itself, and sent only to that account's server."
       (delete-directory auth-dir t))))
 
 
+(ert-deftest rjd/caldav-password-is-found-under-url-el-s-host-and-port ()
+  "A password filed as url.el's Basic auth reads it, under HOST:PORT --
+as org-pa's Fastmail entry is -- is found too, but the bare host's
+entry, where there is one, comes first."
+  (let* ((auth-dir (make-temp-file "rjd-caldav-auth" t))
+         (authinfo (expand-file-name "authinfo" auth-dir))
+         (auth-sources (list authinfo))
+         (fastmail (list :name "fastmail"
+                         :server "https://caldav.fastmail.com/dav/"
+                         :user "user@example.com" :calendars '("Calendar")))
+         (other (list :name "other" :server "https://dav.example.net:8443/dav/"
+                      :user "me@example.net" :calendars '("Home"))))
+    (write-region (concat "machine caldav.fastmail.com:443 login user@example.com"
+                          " password fastmail-pw\n"
+                          "machine dav.example.net:8443 login me@example.net"
+                          " password port-pw\n"
+                          "machine dav.example.net login me@example.net"
+                          " password host-pw\n")
+                  nil authinfo nil 'silent)
+    (auth-source-forget-all-cached)
+    (unwind-protect
+        (progn
+          (should (equal (rjd/caldav--password fastmail) "fastmail-pw"))
+          (should (equal (rjd/caldav--password other) "host-pw")))
+      (auth-source-forget-all-cached)
+      (delete-directory auth-dir t))))
+
+
+(ert-deftest rjd/caldav-list-calendars-says-which-password-is-missing ()
+  "With no password, listing says so, keeping the address and host as
+they are written."
+  (let ((auth-sources nil)
+        (rjd/caldav-accounts
+         (list (list :name "fastmail" :server "https://caldav.fastmail.com/dav/"
+                     :user "user@example.com" :calendars nil))))
+    (auth-source-forget-all-cached)
+    (should (equal (cadr (should-error (rjd/caldav-list-calendars
+                                        (car rjd/caldav-accounts))
+                                       :type 'user-error))
+                   (concat "No password for user@example.com at"
+                           " caldav.fastmail.com in auth-source")))))
+
+
 ;;; Where it runs
 
 (ert-deftest rjd/caldav-active-p-needs-account-calendars-and-no-container ()

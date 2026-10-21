@@ -148,10 +148,11 @@ replaced:
   parser ignores.
 
 **The password is org-pa's.**  org-pa's CalDAV upload already reads its
-password from auth-source under `caldav.fastmail.com`, with the account
-address as login, which is the host and user the fetcher derives from
-the account.  So no new app password is made, and the one entry serves
-both.  That password can write -- org-pa clears and re-uploads its
+password from auth-source, with the account address as login.  It does
+so through url.el's Basic auth, which files it under the host and port,
+`caldav.fastmail.com:443`, so the fetcher looks under the bare host
+first and then under the host and port.  So no new app password is
+made, and the one entry serves both.  That password can write -- org-pa clears and re-uploads its
 calendar with it, and Fastmail scopes app passwords by service
 (Calendars), not by read and write -- so read-only for Fastmail rests
 wholly on the fetcher sending only PROPFIND and REPORT.

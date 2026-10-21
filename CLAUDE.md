@@ -215,8 +215,9 @@ Fastmail's `fastmail-SLUG.org`), rewriting the file whole after each
 successful fetch; calendars whose files would collide, across accounts
 as within one, are refused.  It only ever sends PROPFIND and REPORT:
 each password, from auth-source under its server's host
-(`caldav.icloud.com`, `caldav.fastmail.com`) and the account's user,
-could write -- Fastmail's is the very entry org-pa uploads with -- so
+(`caldav.icloud.com`, `caldav.fastmail.com`), or that host and its
+port as url.el's Basic auth files it (`caldav.fastmail.com:443`), and
+the account's user, could write -- Fastmail's is the very entry org-pa uploads with -- so
 read-only rests on the code.  A calendar fed from org is never
 fetched, even if named: `rjd-caldav` refuses the one at org-pa's
 `org-pa-caldav-url`, read from the value `:custom` saves on the symbol
