@@ -80,13 +80,16 @@ Each is (METHOD URL AUTHORIZATION).")
 
 (defun rjd/caldav-test-replay (responses)
   "A request function answering from RESPONSES.
-RESPONSES is an alist of ((METHOD . URL) . FIXTURE); FIXTURE nil, or a
-request missing from it, answers with an error, as a failed request
-would, and FIXTURE `unauthorized' as a refused password does.  Each request is recorded in `rjd/caldav-test-requests'."
+RESPONSES is an alist of ((METHOD . URL) . FIXTURE), the first entry
+for a request answering it.  FIXTURE is a file name, or parsed XML
+made in the test; nil, or a request missing from it, answers with an
+error, as a failed request would, and `unauthorized' as a refused
+password does.  Each request is recorded in `rjd/caldav-test-requests'."
   (lambda (method url _depth _body authorization callback)
     (push (list method url authorization) rjd/caldav-test-requests)
     (let ((fixture (alist-get (cons method url) responses nil nil #'equal)))
       (cond ((eq fixture 'unauthorized) (funcall callback 'unauthorized nil))
+            ((consp fixture) (funcall callback nil fixture))
             (fixture (funcall callback nil (rjd/caldav-test-dom fixture)))
             (t (funcall callback (format "%s %s: 404" method url) nil))))))
 
@@ -626,6 +629,109 @@ failure after a success is."
                           rjd/caldav-test-requests))
     (should (= (length messages) 1))
     (should (string-search "icloud-probe.org" (car messages)))))
+
+
+;;; Calendars fed from org
+
+(defconst rjd/caldav-test-shared-url
+  "https://p01-caldav.icloud.com/1234567890/calendars/CALENDAR-01/"
+  "The Shared 2018 calendar's URL in the recorded responses.")
+
+(defconst rjd/caldav-test-shared-and-probe-reports
+  `((("REPORT" . ,rjd/caldav-test-shared-url) . "probe-expanded.xml")
+    ,@rjd/caldav-test-probe-report)
+  "Replies to the REPORTs of Shared 2018 and Probe.")
+
+(defmacro rjd/caldav-test-with-org-pa-url (url &rest body)
+  "Run BODY with `org-pa-caldav-url' bound to URL, as once org-pa has loaded."
+  (declare (indent 1))
+  `(cl-progv '(org-pa-caldav-url) (list ,url)
+     ,@body))
+
+(defun rjd/caldav-test-refuses-probe ()
+  "Fetch Shared 2018 and Probe, and check Probe alone is refused.
+For use where org-pa's URL is Probe's: no REPORT goes to it, Shared
+2018 is still written, and the refusal is the one message, naming it."
+  (rjd/caldav-test-fetching '("Shared 2018" "Probe")
+      rjd/caldav-test-shared-and-probe-reports
+    (rjd/caldav-fetch)
+    (should (rjd/caldav-test-file dir "Shared 2018"))
+    (should-not (rjd/caldav-test-file dir "Probe"))
+    (should-not (member (list "REPORT" rjd/caldav-test-probe-url)
+                        (mapcar (lambda (request) (seq-take request 2))
+                                rjd/caldav-test-requests)))
+    (should (= (length messages) 1))
+    (should (string-search "Probe" (car messages)))
+    (should (string-search "org" (car messages)))))
+
+(ert-deftest rjd/caldav-org-pa-s-calendar-is-never-fetched ()
+  "A named calendar at `org-pa-caldav-url' is refused; the rest are fetched."
+  (rjd/caldav-test-with-org-pa-url rjd/caldav-test-probe-url
+    (rjd/caldav-test-refuses-probe)))
+
+(ert-deftest rjd/caldav-org-pa-s-calendar-is-matched-by-decoded-path ()
+  "Another host form, an encoded character or no trailing slash in
+`org-pa-caldav-url' still names the same calendar."
+  (dolist (url '("https://caldav.icloud.com/1234567890/calendars/PROBE-CALENDAR/"
+                 "https://p01-caldav.icloud.com:443/1234567890/calendars/PROBE-CALENDAR"
+                 "https://p01-caldav.icloud.com/1234567890/calendars/%50ROBE-CALENDAR/"))
+    (ert-info (url :prefix "org-pa-caldav-url: ")
+      (rjd/caldav-test-with-org-pa-url url
+        (rjd/caldav-test-refuses-probe)))))
+
+(ert-deftest rjd/caldav-org-pa-s-calendar-is-matched-through-an-encoded-at ()
+  "Fastmail's calendar paths hold the account's address, its @ written
+plainly; `org-pa-caldav-url' may encode it."
+  (let ((calendars
+         (with-temp-buffer
+           (insert "<multistatus xmlns=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\">"
+                   "<response><href>/1234567890/calendars/me@example.com/</href>"
+                   "<propstat><prop><displayname>Plan</displayname>"
+                   "<resourcetype><collection/><c:calendar/></resourcetype>"
+                   "</prop></propstat></response></multistatus>")
+           (libxml-parse-xml-region (point-min) (point-max)))))
+    (rjd/caldav-test-with-org-pa-url
+        "https://p01-caldav.icloud.com/1234567890/calendars/me%40example.com/"
+      (rjd/caldav-test-fetching '("Plan")
+          `((("PROPFIND" . ,rjd/caldav-test-home) . ,calendars))
+        (rjd/caldav-fetch)
+        (should-not (seq-some (lambda (request) (equal (car request) "REPORT"))
+                              rjd/caldav-test-requests))
+        (should (= (length messages) 1))
+        (should (string-search "Plan is fed from org" (car messages)))))))
+
+(ert-deftest rjd/caldav-without-org-pa-nothing-is-refused ()
+  "With org-pa absent, or loaded with no URL set, every calendar is fetched."
+  (should-not (boundp 'org-pa-caldav-url))
+  (should-not (get 'org-pa-caldav-url 'saved-value))
+  (dolist (org-pa '(absent unset))
+    (ert-info ((symbol-name org-pa) :prefix "org-pa: ")
+      (cl-progv (and (eq org-pa 'unset) '(org-pa-caldav-url)) '(nil)
+        (rjd/caldav-test-fetching '("Shared 2018" "Probe")
+            rjd/caldav-test-shared-and-probe-reports
+          (rjd/caldav-fetch)
+          (should (rjd/caldav-test-file dir "Shared 2018"))
+          (should (rjd/caldav-test-file dir "Probe"))
+          (should-not messages))))))
+
+(ert-deftest rjd/caldav-org-pa-s-calendar-is-refused-before-org-pa-loads ()
+  "org-pa loads lazily, but a deferred use-package form's `:custom' has
+saved its URL on the symbol already, and that is refused too."
+  (should-not (boundp 'org-pa-caldav-url))
+  (unwind-protect
+      (progn
+        (eval `(use-package org-pa-caldav
+                 :ensure nil
+                 :defer t
+                 :custom (org-pa-caldav-url ,rjd/caldav-test-probe-url))
+              t)
+        (should-not (boundp 'org-pa-caldav-url))
+        (rjd/caldav-test-refuses-probe))
+    (put 'org-pa-caldav-url 'saved-value nil)
+    (put 'org-pa-caldav-url 'theme-value nil)
+    (put 'use-package 'theme-settings
+         (seq-remove (lambda (setting) (eq (nth 1 setting) 'org-pa-caldav-url))
+                     (get 'use-package 'theme-settings)))))
 
 (ert-deftest rjd/caldav-fetch-without-a-password-does-nothing ()
   "No password, as from a timer that may not prompt: no request, no message."

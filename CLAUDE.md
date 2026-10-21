@@ -216,7 +216,11 @@ as within one, are refused.  It only ever sends PROPFIND and REPORT:
 each password, from auth-source under its server's host
 (`caldav.icloud.com`, `caldav.fastmail.com`) and the account's user,
 could write -- Fastmail's is the very entry org-pa uploads with -- so
-read-only rests on the code.  The accounts are fetched
+read-only rests on the code.  A calendar fed from org is never
+fetched, even if named: `rjd-caldav` refuses the one at org-pa's
+`org-pa-caldav-url`, read from the value `:custom` saves on the symbol
+until org-pa loads, so `private.el` must set that URL in a deferred
+form, not under `:after`.  The accounts are fetched
 together, one failing without stopping another, and failures are
 reported once per run, naming the account.  Recurrences are expanded by
 the server, not here, and iCloud sends each time in its event's TZID

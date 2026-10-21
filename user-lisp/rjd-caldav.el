@@ -67,6 +67,15 @@
 ;; a timer's fetch leaves encrypted sources out, and skips an account
 ;; with no password to hand.
 ;;
+;; A calendar fed from org is never fetched, whatever its name: its
+;; events would be copies of org's own.  The fetcher knows one by its
+;; URL, read from the variables in `rjd/caldav-fed-from-org' --
+;; org-pa's `org-pa-caldav-url' -- and compared by decoded path, so the
+;; host's form and an encoded @ do not matter.  org-pa loads lazily, so
+;; until it has, the URL is the value use-package's `:custom' saved on
+;; the symbol; a form that sets it under `:after' saves nothing until
+;; then, and so guards nothing until then.
+;;
 ;; Nothing is fetched inside a container, so no agent's Emacs holds a
 ;; password; `rjd/caldav-enabled' overrides that.
 ;;
@@ -126,9 +135,10 @@ Each is a plist:
 
 An account without a :user or :calendars is not fetched.  Calendars
 whose files would share a name, in one account or across two, are all
-refused.  A calendar fed from org, such as one beorg writes, must not
-be named: its events would come back into the agenda as copies of
-org's own."
+refused.  A calendar fed from org must not be named either: its events
+would come back into the agenda as copies of org's own.  org-pa's is
+refused even if named, see `rjd/caldav-fed-from-org'; one fed
+otherwise, such as by beorg, is not known to be."
   :type '(repeat
           (plist :tag "Account"
                  :options
@@ -178,6 +188,15 @@ is next turned on."
 (defvar rjd/caldav-container-marker-files '("/.dockerenv" "/run/.containerenv")
   "Files whose presence says Emacs itself runs in a container.
 Docker's and podman's, as `rjd/container-git' in init.el checks.")
+
+(defvar rjd/caldav-fed-from-org '(org-pa-caldav-url)
+  "Variables holding the URL of a calendar fed from org, never fetched.
+Such a calendar's events are copies of org's own, so fetching it would
+show them twice; it is refused even if `rjd/caldav-accounts' names it.
+Each is read from the variable once its package has loaded, and
+before that from the value Custom saved for it, as use-package's
+`:custom' does at once for a deferred package.  The URLs are compared
+by their decoded paths.")
 
 (defvar rjd/caldav-request-function #'rjd/caldav--url-request
   "The function that makes a CalDAV request.
@@ -692,6 +711,31 @@ AUTHORIZATION is the header value to send."
 </c:calendar-query>"
             start end start end)))
 
+(defun rjd/caldav--fed-from-org-urls ()
+  "The URLs of the calendars fed from org, from `rjd/caldav-fed-from-org'.
+A variable not yet defined, its package not yet loaded, is read from
+the value Custom has saved for it, as use-package's `:custom' does at
+once for a deferred package; a value that cannot be had is no URL."
+  (seq-filter #'stringp
+              (mapcar (lambda (variable)
+                        (cond ((boundp variable) (symbol-value variable))
+                              ((get variable 'saved-value)
+                               (ignore-errors
+                                 (eval (car (get variable 'saved-value)) t)))))
+                      rjd/caldav-fed-from-org)))
+
+(defun rjd/caldav--path (url)
+  "URL's path, decoded and ending in a slash, to compare calendars by."
+  (file-name-as-directory
+   (decode-coding-string
+    (url-unhex-string (car (url-path-and-query (url-generic-parse-url url))))
+    'utf-8)))
+
+(defun rjd/caldav--fed-from-org-p (url)
+  "Non-nil if the calendar at URL is fed from org; see `rjd/caldav-fed-from-org'."
+  (member (rjd/caldav--path url)
+          (mapcar #'rjd/caldav--path (rjd/caldav--fed-from-org-urls))))
+
 (defun rjd/caldav--collisions (accounts)
   "The calendar files ACCOUNTS' calendars would share, and why.
 Returns (FILES . ERRORS): FILES the names of the files two or more
@@ -723,17 +767,22 @@ refused, so that none overwrites another's."
 (defun rjd/caldav--wanted (account calendars refused)
   "ACCOUNT's calendars found in CALENDARS, and what is wrong with the rest.
 CALENDARS is discovery's alist.  Returns (WANTED . ERRORS), WANTED an
-alist of (NAME . URL).  A name no calendar has is an error.  A name
+alist of (NAME . URL).  A name no calendar has is an error, and so is a
+calendar fed from org, which is refused whatever its name.  A name
 whose file is in REFUSED, see `rjd/caldav--collisions', is left out
 silently, since the collision is reported once for every account."
   (let (wanted errors)
     (dolist (name (rjd/caldav--names account))
-      (cond ((member (rjd/caldav-file-name (plist-get account :name) name)
-                     refused))
-            ((assoc name calendars)
-             (push (assoc name calendars) wanted))
-            (t
-             (push (format "no calendar is called %s" name) errors))))
+      (let ((calendar (assoc name calendars)))
+        (cond ((member (rjd/caldav-file-name (plist-get account :name) name)
+                       refused))
+              ((and calendar (rjd/caldav--fed-from-org-p (cdr calendar)))
+               (push (format "%s is fed from org, so is never fetched" name)
+                     errors))
+              (calendar
+               (push calendar wanted))
+              (t
+               (push (format "no calendar is called %s" name) errors)))))
     (cons (nreverse wanted) (nreverse errors))))
 
 (defun rjd/caldav--redo-agendas ()
