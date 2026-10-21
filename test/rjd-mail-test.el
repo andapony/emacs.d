@@ -1458,6 +1458,46 @@ It offers the Accept, Tentative and Decline buttons when one of
                        (list (concat "ATTENDEE;PARTSTAT=" (cdr case)
                                      ";RSVP=TRUE:mailto:anything@someone.example"))))))))
 
+(defun rjd/mail-test-own-invitation ()
+  "An invitation the Gmail account organised, to a Fastmail alias.
+Google lists the organiser as the first attendee, and that attendee is
+the user's too, by address and by name."
+  (let ((gmail (plist-get rjd/mail-test-gmail :address))
+        (name (plist-get rjd/mail-test-gmail :full-name)))
+    (concat "BEGIN:VCALENDAR
+PRODID:-//Google Inc//Google Calendar 70.9054//EN
+VERSION:2.0
+METHOD:REQUEST
+BEGIN:VEVENT
+DTSTART:20261011T003000Z
+DTEND:20261011T013000Z
+DTSTAMP:20261011T001500Z
+ORGANIZER;CN=" name ":mailto:" gmail "
+UID:ghi789@google.com
+ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED;RSVP=TRUE;CN=" name ";X-NUM-GUESTS=0:mailto:" gmail "
+ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;X-NUM-GUESTS=0:mailto:anything@someone.example
+SEQUENCE:0
+SUMMARY:Invitation from yourself
+END:VEVENT
+END:VCALENDAR
+")))
+
+(ert-deftest rjd/mail-reply-never-answers-for-the-organiser ()
+  "An invitation you organised from one account, to another's alias, is
+answered for the alias: the organiser does not answer their own."
+  (rjd/mail-test-as-gmail 1
+    (with-temp-buffer
+      (insert (rjd/mail-test-own-invitation))
+      (should (equal (rjd/mail-test-attendees
+                      (split-string (gnus-icalendar-event-reply-from-buffer
+                                     (current-buffer) 'accepted
+                                     (gnus-icalendar-identities))
+                                    "\r?\n" t))
+                     (list (concat "ATTENDEE;CUTYPE=INDIVIDUAL;"
+                                   "ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED;"
+                                   "RSVP=TRUE;X-NUM-GUESTS=0:"
+                                   "mailto:anything@someone.example")))))))
+
 (ert-deftest rjd/mail-invitation-to-an-alias-needs-the-mode ()
   "Off, the alias is only the current context's, and Gmail's is current."
   ;; On and off again first, so that turning it off is what is tested.

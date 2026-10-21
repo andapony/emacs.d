@@ -131,7 +131,13 @@
 ;; `rjd/mail--with-account-identities', which adds one predicate,
 ;; `rjd/mail-own-address-p': true of any active account's address or
 ;; alias.  The #20 advice finds the replier through the same
-;; identities, so the reply still answers for that attendee alone.  It
+;; identities, so the reply still answers for that attendee alone.
+;; With every account's addresses the user's, an invitation the user
+;; organised from one account to another has two of the user's
+;; attendees, the organiser's listed first; the #20 advice moves the
+;; organiser's behind the rest before the builder looks, so the reply
+;; answers for the invited one, not for the organiser (whose answer
+;; Google ignores).  It
 ;; goes to the organiser by mail only, as before; nothing is written to
 ;; any calendar, to org or to the diary.  If `gnus-icalendar-identities'
 ;; is renamed, or the attendee lookup stops accepting predicates, such
@@ -161,6 +167,7 @@
 (declare-function icalendar-ast-node-children "icalendar-ast")
 (declare-function icalendar-ast-node-set-children "icalendar-ast")
 (declare-function icalendar-ast-node-type "icalendar-ast")
+(declare-function icalendar-ast-node-value "icalendar-ast")
 (defvar message-send-coding-system)
 (defvar mail-header-separator)
 
@@ -676,6 +683,37 @@ Does nothing before mu4e has started and knows the root."
                         (eq (icalendar-ast-node-type node) 'icalendar-attendee))
                       (and vevent (icalendar-ast-node-children vevent))))))
 
+(defun rjd/mail--address (node)
+  "The bare address NODE, an ORGANIZER or ATTENDEE, has as its value."
+  (replace-regexp-in-string "\\`mailto:" ""
+                            (downcase (icalendar-ast-node-value
+                                       (icalendar-ast-node-value node)))))
+
+(defun rjd/mail--organiser-last (vcalendar)
+  "Move the organiser's own ATTENDEE behind the others in VCALENDAR.
+Google lists the organiser as an attendee, first.  An invitation the
+user organised from one account to another account's alias has both
+attendees the user's -- the organiser's by address and by
+`user-full-name' too -- and gnus-icalendar answers for the first it
+matches, so the reply would accept for the organiser, which Google
+ignores.  An organiser does not answer their own invitation."
+  (when-let* ((vevent (car (rjd/mail--attendees vcalendar)))
+              (organiser (seq-find (lambda (node)
+                                     (eq (icalendar-ast-node-type node)
+                                         'icalendar-organizer))
+                                   (icalendar-ast-node-children vevent))))
+    (let* ((address (rjd/mail--address organiser))
+           (own (seq-filter (lambda (node)
+                              (and (eq (icalendar-ast-node-type node)
+                                       'icalendar-attendee)
+                                   (equal (rjd/mail--address node) address)))
+                            (icalendar-ast-node-children vevent))))
+      (when own
+        (apply #'icalendar-ast-node-set-children vevent
+               (append (seq-remove (lambda (node) (memq node own))
+                                   (icalendar-ast-node-children vevent))
+                       own))))))
+
 (defun rjd/mail--reply-as-one-attendee (build vcalendar status ids &rest args)
   "Call BUILD, then keep only the replying attendee in the reply it returns.
 Advice around `gnus-icalendar-event--build-reply', which BUILD is, and
@@ -687,7 +725,11 @@ The replier is the invitation's attendee that IDS match -- found as
 BUILD finds it -- or, when none does, the one BUILD adds for
 `user-mail-address': the reply's only attendee that is not the
 invitation's.  If neither can be told, as when BUILD changes how it
-makes the reply, the reply is returned as BUILD made it."
+makes the reply, the reply is returned as BUILD made it.
+
+The organiser's own attendee is matched only if no other is: see
+`rjd/mail--organiser-last'."
+  (rjd/mail--organiser-last vcalendar)
   (let* ((invited (cdr (rjd/mail--attendees vcalendar)))
          (matched (gnus-icalendar-event--find-attendee invited ids))
          (reply (apply build vcalendar status ids args))

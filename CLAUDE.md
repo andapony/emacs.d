@@ -158,7 +158,12 @@ the Gmail context, could not be answered.  It relies on
 gnus-icalendar's attendee lookup accepting predicates as identities;
 an upgrade that renames the function or drops that breaks it silently,
 the buttons simply missing.  **If an invitation to an alias shows no
-buttons, that advice is the first place to look.**  Replies stay mail
+buttons, that advice is the first place to look.**  Since every
+account's address is then the user's, an invitation organised from one
+account to another has two of the user's attendees; the reply advice
+moves the organiser's behind the rest first, so the reply answers for
+the invited one -- if an acceptance of such an invitation does not
+show, check the reply's ATTENDEE is not the organiser.  Replies stay mail
 only: nothing is written to any calendar.
 
 Every mail command (mbsync, msmtp, oama) is built with
