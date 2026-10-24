@@ -1507,7 +1507,12 @@ the main view should not usually stop it."
     (mu4e-quit (not quit)))
   :bind (("C-c M" . mu4e)
          :map mu4e-main-mode-map
-         ("q" . rjd/mu4e-bury-or-quit))
+         ("q" . rjd/mu4e-bury-or-quit)
+         ;; Someone heard from, made a completion like someone written to.
+         :map mu4e-view-mode-map
+         ("C-c +" . rjd/mail-contacts-add-sender)
+         :map mu4e-headers-mode-map
+         ("C-c +" . rjd/mail-contacts-add-sender))
   :init
   (add-hook 'emacs-startup-hook #'rjd/mail-start-syncing)
   ;; All mail is written in mu4e: `compose-mail' -- C-x m, a mailto:
@@ -1632,6 +1637,12 @@ the main view should not usually stop it."
      (:name "Flagged" :key ?f :query "flag:flagged")))
   :config
   (rjd/mail-mode 1)
+  ;; Addresses complete only from the people written to, learned from
+  ;; each send, or added with C-c + -- not from every contact mu has
+  ;; indexed.  The list is in ~/Sync, so every machine shares it; run
+  ;; `rjd/mail-contacts-seed' once to fill it from the mail already
+  ;; sent.  user-lisp/rjd-mail-contacts.el has the rest.
+  (rjd/mail-contacts-mode 1)
   ;; Meeting invitations: a message's text/calendar part is shown with
   ;; Accept, Tentative and Decline buttons.  The buttons are Gnus's;
   ;; mu4e-icalendar takes over their reply in a mu4e view, composing it

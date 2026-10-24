@@ -185,6 +185,20 @@ declares data; the decision stays here, under test.  On the Mac, mu
 and mu4e come from Homebrew, and mu4e's form puts Homebrew's
 site-lisp on `load-path`.  ERT tests: `test/rjd-mail-test.el`.
 
+Addresses complete only from the people written to, through
+`rjd-mail-contacts` (user-lisp), not from every contact mu has indexed:
+`rjd/mail-contacts-mode` turns mu4e's completion off and has message's
+standard completion read an ecomplete list instead.  Each successful
+send adds its To and Cc, from `message-sent-hook`; `C-c +` in a mu4e
+view or headers buffer adds the sender; `rjd/mail-contacts-seed` fills
+the list once from the Sent folders, through `mu find`.  message's own
+ecomplete learning (`message-mail-alias-type`) is deliberately left
+off, since it learns From, Reply-To and Bcc.  The list is a file of
+addresses, so it lives in `rjd/mail-contacts-directory`, `~/Sync/emacs/`
+where `~/Sync` is a Syncthing folder and `~/` elsewhere -- never in
+this working tree, ecomplete's default.  It is enabled from mu4e's
+form.  ERT tests: `test/rjd-mail-contacts-test.el`.
+
 ## Calendar
 
 Every external calendar is fetched, read-only, into its own calendar
