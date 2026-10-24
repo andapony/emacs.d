@@ -93,6 +93,18 @@
 ;; groups -- because mu matches it as PCRE and mu4e's
 ;; `mu4e-personal-address-p' as an Emacs regexp.
 ;;
+;; message looks for that address only in the original's To, Cc and
+;; From, so mail Bcc'd to an alias -- in none of them -- was answered
+;; from the account's own address.  The mode puts
+;; `rjd/mail--reply-from-delivery-address' after
+;; `message-use-alternative-email-as-from': when no alias is in those
+;; headers, it takes the first in the headers the receiving server
+;; names the delivery address in, `rjd/mail-delivery-headers' --
+;; Fastmail's X-Delivered-to among them.  Only an address the
+;; context's `message-alternative-emails' accepts is taken, so a forged
+;; header can choose nothing but one of the user's own.  If a reply to
+;; Bcc'd mail is again from the account's address, look here first.
+;;
 ;; Gmail needs three things from mu4e beyond these contexts:
 ;; duplicates hidden, because a message in the Inbox is also in All
 ;; Mail; related messages left out of searches, or a thread's spam and
@@ -163,6 +175,11 @@
 (declare-function message-narrow-to-headers "message")
 (declare-function message-fetch-field "message")
 (declare-function mail-strip-quoted-names "mail-utils")
+(declare-function message-fetch-reply-field "message")
+(declare-function message-tokenize-header "message")
+(declare-function message-remove-header "message")
+(declare-function message-make-from "message")
+(defvar message-alternative-emails)
 (declare-function gnus-icalendar-event--find-attendee "gnus-icalendar")
 (declare-function icalendar-ast-node-children "icalendar-ast")
 (declare-function icalendar-ast-node-set-children "icalendar-ast")
@@ -578,6 +595,46 @@ the prefixed command in `message-sendmail-extra-arguments', that makes
          (point-min) (point-max))))))
 
 
+;;; Replies
+
+(defvar rjd/mail-delivery-headers '("X-Delivered-To" "X-Original-To" "Delivered-To")
+  "Headers a receiving server names the address it delivered to in.
+Fastmail's, Postfix's and Gmail's.  `rjd/mail--reply-from-delivery-address'
+looks in them, in this order, for the alias Bcc'd mail was sent to.")
+
+(defun rjd/mail--alternative-email (fields)
+  "The first address in FIELDS of the original that is an alternative.
+FIELDS are header names, looked up in the message being replied to;
+an alternative is an address `message-alternative-emails' accepts,
+as `message-use-alternative-email-as-from' tests it.  Or nil."
+  (seq-find (lambda (email)
+              (if (functionp message-alternative-emails)
+                  (funcall message-alternative-emails email)
+                (string-match-p message-alternative-emails email)))
+            (message-tokenize-header
+             (mail-strip-quoted-names
+              (mapconcat #'identity
+                         (delq nil (mapcar #'message-fetch-reply-field fields))
+                         ",")))))
+
+(defun rjd/mail--reply-from-delivery-address (&rest _)
+  "Make a reply to Bcc'd mail from the alias it was delivered to.
+Advice after `message-use-alternative-email-as-from', which makes the
+reply's From the alternative address in the original's To, Cc or From
+-- and, with none there, leaves it the account's own.  Mail Bcc'd to an
+alias has none there, so then the reply is from the first alternative
+in `rjd/mail-delivery-headers'.  Runs, as the advised function does,
+with the new message narrowed to its headers."
+  (when (and message-alternative-emails
+             (not (rjd/mail--alternative-email '("To" "Cc" "From"))))
+    (when-let* ((email (rjd/mail--alternative-email rjd/mail-delivery-headers)))
+      (unless (equal email user-mail-address)
+        (message-remove-header "From")
+        (goto-char (point-max))
+        (insert "From: " (let ((user-mail-address email)) (message-make-from))
+                "\n")))))
+
+
 ;;; Queries
 
 (defun rjd/mail--junk-folders (accounts)
@@ -819,7 +876,8 @@ replies; see `rjd/mail--reply-as-one-attendee'.  And an invitation to
 any active account's address or alias can be answered, whatever the
 context: advice on `gnus-icalendar-identities' adds them to the
 identities gnus-icalendar matches attendees against; see
-`rjd/mail--with-account-identities'."
+`rjd/mail--with-account-identities'.  And a reply to mail Bcc'd to an
+alias is from that alias; see `rjd/mail--reply-from-delivery-address'."
   :global t
   :group 'rjd/mail
   (if rjd/mail-mode
@@ -853,7 +911,9 @@ identities gnus-icalendar matches attendees against; see
         (advice-add 'gnus-icalendar-event--build-reply :around
                     #'rjd/mail--reply-as-one-attendee)
         (advice-add 'gnus-icalendar-identities :filter-return
-                    #'rjd/mail--with-account-identities))
+                    #'rjd/mail--with-account-identities)
+        (advice-add 'message-use-alternative-email-as-from :after
+                    #'rjd/mail--reply-from-delivery-address))
     (remove-hook 'message-mode-hook #'rjd/mail--restore-default-identity)
     (advice-remove 'mu4e-update-index
                    #'rjd/mail--move-flagged-new-before-index)
@@ -861,6 +921,8 @@ identities gnus-icalendar matches attendees against; see
                    #'rjd/mail--reply-as-one-attendee)
     (advice-remove 'gnus-icalendar-identities
                    #'rjd/mail--with-account-identities)
+    (advice-remove 'message-use-alternative-email-as-from
+                   #'rjd/mail--reply-from-delivery-address)
     (when rjd/mail--before-mode
       (rjd/mail--leave)
       (setq mu4e-contexts (nth 0 rjd/mail--before-mode)

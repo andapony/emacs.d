@@ -1207,10 +1207,11 @@ smtpmail, with the mode on and after it is turned off."
 (defvar mu4e-compose-context-policy)
 (declare-function mu4e-compose-reply "mu4e-compose")
 
-(defun rjd/mail-test-reply-from (accounts to)
+(defun rjd/mail-test-reply-from (accounts to &optional headers maildir)
   "The From of mu4e's reply to a message addressed to TO.
-The message is from you@example.net and is not in any account's
-maildir, so the context is chosen by address alone.  ACCOUNTS are
+The message is from you@example.net, with HEADERS, a string of header
+lines, besides; it is in MAILDIR, or else in no account's maildir, so
+the context is chosen by address alone.  ACCOUNTS are
 declared, with `rjd/mail-mode' on and the Fastmail default as the
 globals.  The reply is mu4e's own, `mu4e-compose-reply', with the mu
 server stood in for: it is not running, and knows no personal
@@ -1219,7 +1220,7 @@ addresses, so only the context can make the reply's From an alias."
   (rjd/mail-test-with-fastmail-defaults
     (let* ((root (make-temp-file "rjd-mail-reply" t))
            (parent (expand-file-name "parent" root))
-           (msg `(:path ,parent :maildir "/elsewhere" :subject "Hi"
+           (msg `(:path ,parent :maildir ,(or maildir "/elsewhere") :subject "Hi"
                   :from ((:name "You" :email "you@example.net"))
                   :to ((:email ,to))))
            (rjd/mail-accounts accounts)
@@ -1235,7 +1236,7 @@ addresses, so only the context can make the reply's From an alias."
            (draft nil))
       (with-temp-file parent
         (insert "From: You <you@example.net>\nTo: " to "\nSubject: Hi\n"
-                "Message-Id: <1@example.net>\n"
+                (or headers "") "Message-Id: <1@example.net>\n"
                 "Date: Sun, 11 Oct 2026 10:00:00 +0000\n\nHello.\n"))
       (rjd/mail-mode 1)
       (unwind-protect
@@ -1273,6 +1274,39 @@ addresses, so only the context can make the reply's From an alias."
                     (list rjd/mail-test-gmail fastmail)
                     "someone@fastmail.example")
                    "someone@fastmail.example"))))
+
+
+;; Mail Bcc'd to an alias names it only where it was delivered.
+(ert-deftest rjd/mail-reply-to-mail-bccd-to-an-alias-is-from-that-alias ()
+  "The alias in a delivery header answers when To and Cc name none."
+  (rjd/mail-test-needs-mu4e)
+  (dolist (header rjd/mail-delivery-headers)
+    (dolist (address rjd/mail-test-alias-addresses)
+      (should (equal (rjd/mail-test-reply-from
+                      (list rjd/mail-test-gmail rjd/mail-test-fastmail-aliases)
+                      "else@example.net"
+                      (concat header ": " address "\n")
+                      "/fastmail-test/INBOX")
+                     address)))))
+
+(ert-deftest rjd/mail-reply-prefers-the-alias-in-to ()
+  "An alias in To wins over a different one the mail was delivered to."
+  (rjd/mail-test-needs-mu4e)
+  (should (equal (rjd/mail-test-reply-from
+                  (list rjd/mail-test-gmail rjd/mail-test-fastmail-aliases)
+                  "shop@someone.fastmail.example"
+                  "X-Delivered-to: anything@someone.example\n")
+                 "shop@someone.fastmail.example")))
+
+(ert-deftest rjd/mail-reply-ignores-a-delivery-address-not-the-users ()
+  "A delivery header naming someone else's address changes nothing."
+  (rjd/mail-test-needs-mu4e)
+  (should (equal (rjd/mail-test-reply-from
+                  (list rjd/mail-test-gmail rjd/mail-test-fastmail-aliases)
+                  "else@example.net"
+                  "X-Delivered-to: forged@example.net\n"
+                  "/fastmail-test/INBOX")
+                 "someone@fastmail.example")))
 
 
 ;;; Invitation replies

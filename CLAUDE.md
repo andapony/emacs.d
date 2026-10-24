@@ -110,6 +110,13 @@ addresses) are one regexp, its optional `:addresses`, set in
 `private.el` and never here.  Mail to an alias picks the account's
 context, a From of one sends through its msmtp, and the context sets
 `message-alternative-emails` so a reply is from the alias written to.
+message looks for that alias only in To, Cc and From, so for mail
+Bcc'd to one `rjd/mail-mode` adds `:after` advice on
+`message-use-alternative-email-as-from` that falls back to the
+delivery headers (Fastmail's `X-Delivered-to`, `X-Original-To`,
+`Delivered-To`), taking only an address the alias test accepts.  **If
+a reply to Bcc'd mail is from the account's address again, that
+advice is the first place to look.**
 `mu init --my-address` needs the same addresses in `/.../` form, so mu
 counts that mail as personal: one `--my-address` per alias form,
 written in syntax PCRE and Emacs share (no `|` or groups), since mu
