@@ -760,10 +760,6 @@ buffer, is left out, as it was before this existed."
      ("a" "Link to web page (alphapapa)" entry
       (file+olp+datetree "~/Sync/org-more/alphapapa-links.org")
       "%(org-web-tools--url-as-readable-org)" :empty-lines 1)
-     ("h" "Heirloom task" entry
-      (file+olp+datetree "~/Sync/org/heirloom.org" "Heirloom")
-      "* %^{Task description} :%^{Tag|misc|meeting|review|code}:\n%U"
-      :clock-in t :clock-keep t)
      ;; org-capture creates the "Cetos" heading at the end of the file if it
      ;; is missing, so this needs no setup in projects.org.  Captured from a
      ;; mu4e message, the task links back to it; from anywhere else, the
