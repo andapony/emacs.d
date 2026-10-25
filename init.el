@@ -911,6 +911,17 @@ copies."
   :config
   (which-key-mode))
 
+;; Scroll by pixels rather than lines.  An inline image is a single line
+;; however tall it is, so line scrolling jumps it past as one unit.  Only
+;; a window system can scroll by pixels; on a terminal frame this does
+;; nothing.
+(use-package pixel-scroll
+  :custom
+  ;; Animate C-v and M-v too, not only the wheel and trackpad.
+  (pixel-scroll-precision-interpolate-page t)
+  :config
+  (pixel-scroll-precision-mode 1))
+
 ;;; Completion
 
 (use-package orderless
