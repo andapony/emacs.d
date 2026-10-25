@@ -795,6 +795,14 @@ copies."
   (advice-add 'org-icalendar-combine-agenda-files
               :around #'rjd/icalendar-combine-without-calendars))
 
+;; GitHub-flavoured Markdown export, as `g' in the export dispatcher:
+;; pipe tables and fenced code blocks, where the built-in ox-md, which it
+;; builds on, writes HTML tables and indented code.  Loaded with ox, so
+;; the backend is registered before the dispatcher first draws its menu.
+(use-package ox-gfm
+  :ensure t
+  :after ox)
+
 ;; Loaded from vendor/, which the setup repo symlinks into place; tolerate
 ;; its absence so the rest of this file still loads on a bare checkout.
 (when (require 'rjd-org-sync nil :noerror)
@@ -1293,7 +1301,18 @@ navigating by Go declarations."
   :ensure t
   :defer t
   :custom
-  (denote-directory "~/Sync/notes"))
+  (denote-directory "~/Sync/notes")
+  :config
+  ;; New Org notes export without a table of contents, which in a note
+  ;; shared as Markdown is only clutter.  The line goes before the blank
+  ;; line that ends denote's own front matter, so whatever else a denote
+  ;; upgrade puts there is kept.  The front matter is a plain defvar, not
+  ;; a defcustom, so it is changed once denote has defined it; the guard
+  ;; keeps re-evaluating this form from adding the line twice.
+  (unless (string-search "#+options:" denote-org-front-matter)
+    (setq denote-org-front-matter
+          (concat (string-remove-suffix "\n" denote-org-front-matter)
+                  "#+options:    toc:nil\n\n"))))
 
 (use-package org-reading-list
   :ensure nil

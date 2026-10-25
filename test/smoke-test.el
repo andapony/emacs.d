@@ -546,6 +546,43 @@ another calendar through the exported .ics."
       (delete-directory dir t))))
 
 
+;;; Markdown export
+
+(ert-deftest rjd/smoke-markdown-export-is-github-flavoured ()
+  "Org exports to GitHub-flavoured Markdown from the dispatcher.
+The backend is registered once ox loads, before the dispatcher draws
+its menu, and writes pipe tables and fenced code."
+  (require 'ox)
+  (should (org-export-get-backend 'gfm))
+  (let ((md (with-temp-buffer
+              (insert "| a | b |\n|---+---|\n| 1 | 2 |\n\n"
+                      "#+begin_src python\nprint(1)\n#+end_src\n")
+              (org-mode)
+              (let ((org-export-with-toc nil))
+                (org-export-as 'gfm)))))
+    (should (string-search "| a | b |" md))
+    (should (string-search "```python" md))
+    (should-not (string-search "<table" md))))
+
+(ert-deftest rjd/smoke-denote-org-notes-export-without-toc ()
+  "A new denote Org note turns off the table of contents in export."
+  (require 'denote)
+  (let* ((dir (file-name-as-directory (make-temp-file "rjd-smoke-denote" t)))
+         (denote-directory dir)
+         (denote-kill-buffers t))
+    (unwind-protect
+        (let ((note (denote "Smoke" '("test") 'org dir)))
+          (with-temp-buffer
+            (insert-file-contents note)
+            (should (re-search-forward "^#\\+title: +Smoke$" nil t))
+            ;; Inside the front matter, which still ends in a blank line.
+            (should (re-search-forward "^#\\+options: +toc:nil\n\n" nil t))
+            (should-not (string-search
+                         "\n\n" (buffer-substring (point-min)
+                                                  (match-beginning 0))))))
+      (delete-directory dir t))))
+
+
 ;;; CalDAV calendars
 
 (ert-deftest rjd/smoke-caldav-is-on-once-the-agenda-loads ()
