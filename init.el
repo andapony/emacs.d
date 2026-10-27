@@ -144,9 +144,10 @@
         modus-themes-bold-constructs t
         modus-themes-region '(bg-only no-extend)
         modus-themes-org-blocks 'gray-background
-        modus-themes-mixed-fonts t)
+        modus-themes-mixed-fonts t
+        modus-themes-to-toggle '(modus-operandi-tinted modus-vivendi-tinted))
   :config
-  (load-theme 'modus-operandi :no-confirm)
+  (load-theme 'modus-operandi-tinted :no-confirm)
   :bind ("<f5>" . modus-themes-toggle))
 
 ;; See prot's notes on mixed font heights:
@@ -661,9 +662,10 @@ traversing corrupts its iteration."
   (org-reverse-note-order t)
   (org-special-ctrl-a/e t)
   (org-todo-keywords '((sequence "TODO" "NEXT" "WAITING" "|" "DONE" "CANCELLED")))
-  ;; Faces rather than colour strings.  <f5> toggles between modus-operandi
-  ;; and modus-vivendi, and a literal colour cannot follow: "light blue" on
-  ;; the light theme's white background had no contrast to speak of.  These
+  ;; Faces rather than colour strings.  <f5> toggles between
+  ;; modus-operandi-tinted and modus-vivendi-tinted, and a literal colour
+  ;; cannot follow: "light blue" on the light theme's pale background had
+  ;; no contrast to speak of.  These
   ;; three are defined by both themes, checked for contrast at either
   ;; polarity, and `warning'/`shadow' land on much the same hues the strings
   ;; were reaching for.
