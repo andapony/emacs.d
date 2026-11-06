@@ -99,9 +99,17 @@ in the header, which agent-shell cannot know because the ACP
 which agent-shell cannot know because it keeps only `agentCapabilities`
 and `modes` from the ACP `initialize` response and drops `agentInfo`.
 Both reach the container through `agent-shell-command-prefix`, calling
-it with the current buffer as agent-shell does with the shell's; their
-caches are global, so with two containers they show whichever answered
-first.
+it with the shell's buffer as agent-shell does, and keep everything they
+cache per container, keyed by that prefix: two containers can run two
+Claude accounts (`claude-dev` the personal one, `claude-cetos` the
+company's) and two Claude Code builds, and each shell's header shows its
+own container's budget and version.  The budget's timer refreshes every
+container an open shell runs in, and a container's first header starts
+its first fetch.  For a shell in a container the budget reads only that
+container's login, never the host's credentials file or Keychain, which
+may belong to another account.  ERT tests:
+`test/rjd-agent-shell-budget-test.el` and
+`test/rjd-agent-shell-version-test.el`.
 
 Both advise `agent-shell--make-header-model`, a private function, so an
 agent-shell upgrade can break them — and does so *silently*, by the
