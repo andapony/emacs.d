@@ -136,6 +136,17 @@ to $HOME there rather than to this host's idea of home."
       (concat "\"$HOME\"/" (shell-quote-argument (substring path 2)))
     (shell-quote-argument path)))
 
+(defun rjd/agent-shell-budget--command-prefix ()
+  "Return `agent-shell-command-prefix' as a list, for the current buffer.
+agent-shell takes a function of the buffer there as well as a list, and
+calls it with the shell's buffer; this calls it with whichever buffer is
+current, which outside a shell gives the prefix for that buffer's
+directory."
+  (when (boundp 'agent-shell-command-prefix)
+    (if (functionp agent-shell-command-prefix)
+        (funcall agent-shell-command-prefix (current-buffer))
+      agent-shell-command-prefix)))
+
 (defun rjd/agent-shell-budget--credentials-from-command-prefix ()
   "Return the credentials blob read through `agent-shell-command-prefix'.
 Runs `cat' on the credentials file wherever the prefix lands, which for a
@@ -145,8 +156,7 @@ Nil when the prefix is unset, disabled, or fails.
 This spawns a process synchronously, so it is the expensive source; see
 `rjd/agent-shell-budget--token' for how often it actually runs."
   (when-let* ((rjd/agent-shell-budget-use-command-prefix)
-              ((boundp 'agent-shell-command-prefix))
-              (prefix agent-shell-command-prefix)
+              (prefix (rjd/agent-shell-budget--command-prefix))
               (program (car prefix)))
     (with-temp-buffer
       (when (zerop (apply #'call-process program nil t nil

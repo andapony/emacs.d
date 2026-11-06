@@ -181,6 +181,17 @@ arrives from a background process has to poke each buffer itself."
       (when (derived-mode-p 'agent-shell-mode)
         (ignore-errors (agent-shell--update-header-and-mode-line))))))
 
+(defun rjd/agent-shell-version--command-prefix ()
+  "Return `agent-shell-command-prefix' as a list, for the current buffer.
+agent-shell takes a function of the buffer there as well as a list, and
+calls it with the shell's buffer.  This calls it with whichever buffer
+is current: the shell's when the header asks for the version, since
+the header is drawn in the shell's buffer."
+  (when (boundp 'agent-shell-command-prefix)
+    (if (functionp agent-shell-command-prefix)
+        (funcall agent-shell-command-prefix (current-buffer))
+      agent-shell-command-prefix)))
+
 (defun rjd/agent-shell-version--run (name command callback)
   "Run COMMAND asynchronously under NAME and call CALLBACK with its output.
 COMMAND is prefixed with `agent-shell-command-prefix' so it lands
@@ -191,9 +202,7 @@ single place to clear its in-flight flag and stamp its cache.
 Asynchronous because the prefix may be a `docker exec', and the update
 check additionally talks to a registry; either would be felt on the
 redisplay path that renders the header."
-  (let ((full (append (and (boundp 'agent-shell-command-prefix)
-                           agent-shell-command-prefix)
-                      command))
+  (let ((full (append (rjd/agent-shell-version--command-prefix) command))
         (output ""))
     (condition-case nil
         (make-process
@@ -315,8 +324,7 @@ takes whatever is latest now, so the version named is a floor."
         (make-process
          :name "rjd-agent-shell-version-install"
          :buffer buffer
-         :command (append (and (boundp 'agent-shell-command-prefix)
-                               agent-shell-command-prefix)
+         :command (append (rjd/agent-shell-version--command-prefix)
                           rjd/agent-shell-version-install-command)
          :noquery t
          :connection-type 'pipe
