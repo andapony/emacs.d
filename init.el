@@ -51,6 +51,28 @@
     (write-region "" nil custom-file))
   (load custom-file))
 
+;;; Synced directory
+
+;;
+;; Everything kept in step between machines -- abbrevs, notes, the
+;; contacts list, the feeds database, the exported calendar -- lives
+;; under one directory, which every such path below is built from.  It
+;; is ~/Sync, the personal Syncthing folder, by default; a machine that
+;; never joins that folder points it at its own stand-in from
+;; private.el, with a plain `setq'.  That works because private.el is
+;; loaded just below, before any form that reads the directory is
+;; evaluated: the `:custom' values below are evaluated as init.el reads
+;; them, or later still, when their package loads.  The defcustom comes
+;; first, so that `setq' simply replaces its default.
+(defcustom rjd/sync-directory "~/Sync/"
+  "The directory synced between machines, which every synced path is under.
+Abbrevs, denote's notes, the mail contacts list, elfeed's database, the
+alphapapa links and the combined .ics export are all built from it, as
+init.el loads.  Set it in private.el, with `setq', on a machine whose
+synced folder is somewhere else; it is read only at startup."
+  :type 'directory
+  :group 'environment)
+
 ;;; Private settings
 
 ;;
@@ -200,18 +222,19 @@ everywhere else."
 
 (use-package abbrev
   :custom
-  ;; Kept in ~/Sync so that a typo fixed on one machine is fixed on all of
-  ;; them.  A machine without ~/Sync -- a work one, or the claude-dev
-  ;; container -- keeps its own in ~/.
-  (abbrev-file-name (if (file-directory-p "~/Sync")
-                        "~/Sync/emacs/abbrev_defs"
+  ;; Kept in `rjd/sync-directory' so that a typo fixed on one machine is
+  ;; fixed on all of them.  A machine without that directory -- the
+  ;; claude-dev container, say -- keeps its own in ~/.
+  (abbrev-file-name (if (file-directory-p rjd/sync-directory)
+                        (file-name-concat rjd/sync-directory
+                                          "emacs/abbrev_defs")
                       "~/.abbrev_defs"))
   ;; Written on exit without asking, so an abbrev defined some other way
   ;; than `rjd/jinx-correct-and-abbrev' is kept too.
   (save-abbrevs 'silently)
   :config
-  ;; write-region does not create directories, so make ~/Sync/emacs before
-  ;; anything tries to save there.
+  ;; write-region does not create directories, so make the emacs/
+  ;; directory in `rjd/sync-directory' before anything tries to save there.
   (make-directory (file-name-directory abbrev-file-name) t)
   (setq-default abbrev-mode t))
 
@@ -769,7 +792,8 @@ buffer, is left out, as it was before this existed."
      ;; not at load, so it will look like a capture problem rather than a
      ;; dependency one.
      ("a" "Link to web page (alphapapa)" entry
-      (file+olp+datetree "~/Sync/org-more/alphapapa-links.org")
+      (file+olp+datetree
+       ,(file-name-concat rjd/sync-directory "org-more/alphapapa-links.org"))
       "%(org-web-tools--url-as-readable-org)" :empty-lines 1)
      ;; org-capture creates the "Cetos" heading at the end of the file if it
      ;; is missing, so this needs no setup in projects.org.  Captured from a
@@ -804,7 +828,8 @@ copies."
                        (org-agenda-files t))))
       (apply combine args)))
   :custom
-  (org-icalendar-combined-agenda-file "~/Sync/org/agenda.ics")
+  (org-icalendar-combined-agenda-file
+   (file-name-concat rjd/sync-directory "org/agenda.ics"))
   (org-icalendar-include-todo t)
   (org-icalendar-use-deadline '(event-if-todo event-if-not-todo))
   (org-icalendar-use-scheduled '(event-if-todo))
@@ -819,6 +844,14 @@ copies."
 (use-package ox-gfm
   :ensure t
   :after ox)
+
+;; Jira issues as org entries, from rjd-jira in user-lisp/, into a file
+;; that is synced like the rest.
+(use-package rjd-jira
+  :defer t
+  :custom
+  (rjd-jira/jira-org-path
+   (file-name-concat rjd/sync-directory "org/agenda/Jira.org")))
 
 ;; Loaded from vendor/, which the setup repo symlinks into place; tolerate
 ;; its absence so the rest of this file still loads on a bare checkout.
@@ -1328,7 +1361,7 @@ navigating by Go declarations."
   :ensure t
   :defer t
   :custom
-  (denote-directory "~/Sync/notes")
+  (denote-directory (file-name-concat rjd/sync-directory "notes"))
   :config
   ;; New Org notes export without a table of contents, which in a note
   ;; shared as Markdown is only clutter.  The line goes before the blank
@@ -1681,7 +1714,8 @@ the main view should not usually stop it."
   (rjd/mail-mode 1)
   ;; Addresses complete only from the people written to, learned from
   ;; each send, or added with C-c + -- not from every contact mu has
-  ;; indexed.  The list is in ~/Sync, so every machine shares it; run
+  ;; indexed.  The list is in `rjd/sync-directory' where that exists, so
+  ;; every machine shares it; run
   ;; `rjd/mail-contacts-seed' once to fill it from the mail already
   ;; sent.  user-lisp/rjd-mail-contacts.el has the rest.
   (rjd/mail-contacts-mode 1)
@@ -1724,7 +1758,7 @@ whatever another machine has synced in since."
     (elfeed)
     (elfeed-search-update :force))
   :custom
-  (elfeed-db-directory "~/Sync/elfeed")
+  (elfeed-db-directory (file-name-concat rjd/sync-directory "elfeed"))
   ;; The database sits in a synced directory, so it needs to be on disk by
   ;; the time the sync tool looks.  elfeed already saves it from
   ;; `quit-window-hook' and `kill-buffer-hook'; nil only stops it deferring

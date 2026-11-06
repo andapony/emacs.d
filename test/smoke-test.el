@@ -534,6 +534,93 @@ for a missing file and asks about it every time it opens."
     (should-not (file-exists-p rjd/calendar-directory))))
 
 
+;;; Synced directory
+
+(defun rjd/smoke-custom-value (variable)
+  "VARIABLE's value as init.el's `:custom' computes it now.
+`:custom' records the expression, not its value, against the
+use-package theme, so evaluating it again under a let-bound
+`rjd/sync-directory' shows what that setting would have made."
+  (eval (car (alist-get 'use-package (get variable 'theme-value))) t))
+
+(defun rjd/smoke-synced-paths ()
+  "Every path init.el builds from `rjd/sync-directory', computed now.
+An alist of (NAME . PATH)."
+  (require 'rjd-mail-contacts)
+  `((abbrevs . ,(rjd/smoke-custom-value 'abbrev-file-name))
+    (notes . ,(rjd/smoke-custom-value 'denote-directory))
+    (contacts . ,(rjd/mail-contacts-default-directory))
+    (links . ,(nth 1 (nth 3 (assoc "a" (rjd/smoke-custom-value
+                                        'org-capture-templates)))))
+    (ics . ,(rjd/smoke-custom-value 'org-icalendar-combined-agenda-file))
+    (feeds . ,(rjd/smoke-custom-value 'elfeed-db-directory))
+    (jira . ,(rjd/smoke-custom-value 'rjd-jira/jira-org-path))))
+
+(defun rjd/smoke-today-s-synced-paths (sync-exists)
+  "The synced paths as they were before `rjd/sync-directory', literally.
+SYNC-EXISTS says whether ~/Sync exists, which abbrevs and the contacts
+list depend on."
+  `((abbrevs . ,(if sync-exists "~/Sync/emacs/abbrev_defs" "~/.abbrev_defs"))
+    (notes . "~/Sync/notes")
+    (contacts . ,(if sync-exists "~/Sync/emacs/" "~/"))
+    (links . "~/Sync/org-more/alphapapa-links.org")
+    (ics . "~/Sync/org/agenda.ics")
+    (feeds . "~/Sync/elfeed")
+    (jira . "~/Sync/org/agenda/Jira.org")))
+
+(ert-deftest rjd/smoke-synced-paths-are-unchanged-by-default ()
+  "With `rjd/sync-directory' at its default, every path is as it was.
+Both where ~/Sync exists and where it does not."
+  (require 'rjd-mail-contacts)
+  (should (equal (eval (car (get 'rjd/sync-directory 'standard-value)) t)
+                 "~/Sync/"))
+  (let ((rjd/sync-directory "~/Sync/"))
+    (dolist (sync-exists '(t nil))
+      (cl-letf* ((directory-p (symbol-function 'file-directory-p))
+                 ((symbol-function 'file-directory-p)
+                  (lambda (dir)
+                    (if (equal dir "~/Sync/")
+                        sync-exists
+                      (funcall directory-p dir)))))
+        (should (equal (rjd/smoke-synced-paths)
+                       (rjd/smoke-today-s-synced-paths sync-exists)))))))
+
+(ert-deftest rjd/smoke-synced-paths-as-loaded-are-unchanged ()
+  "Where private.el leaves `rjd/sync-directory' alone, as loaded too.
+Checks the values in effect, which a value saved in custom.el would
+override, not only what init.el computes."
+  (skip-unless (equal rjd/sync-directory "~/Sync/"))
+  (dolist (feature '(abbrev denote rjd-mail-contacts org-capture
+                     ox-icalendar elfeed rjd-jira))
+    (require feature))
+  (should (equal
+           `((abbrevs . ,abbrev-file-name)
+             (notes . ,denote-directory)
+             (contacts . ,rjd/mail-contacts-directory)
+             (links . ,(nth 1 (nth 3 (assoc "a" org-capture-templates))))
+             (ics . ,org-icalendar-combined-agenda-file)
+             (feeds . ,elfeed-db-directory)
+             (jira . ,rjd-jira/jira-org-path))
+           (rjd/smoke-today-s-synced-paths (file-directory-p "~/Sync/")))))
+
+(ert-deftest rjd/smoke-synced-paths-follow-the-synced-directory ()
+  "With `rjd/sync-directory' set elsewhere, every synced path is under it."
+  (let* ((dir (file-name-as-directory (make-temp-file "rjd-smoke-sync" t)))
+         (rjd/sync-directory dir))
+    (unwind-protect
+        (pcase-dolist (`(,name . ,path) (rjd/smoke-synced-paths))
+          (should (equal (list name (file-in-directory-p path dir))
+                         (list name t))))
+      (delete-directory dir t))))
+
+(ert-deftest rjd/smoke-synced-paths-without-the-synced-directory ()
+  "Where `rjd/sync-directory' does not exist, abbrevs and contacts are in ~/."
+  (let ((rjd/sync-directory "/nonexistent-rjd-smoke/Sync/"))
+    (let ((paths (rjd/smoke-synced-paths)))
+      (should (equal (alist-get 'abbrevs paths) "~/.abbrev_defs"))
+      (should (equal (alist-get 'contacts paths) "~/")))))
+
+
 ;;; Google Calendar
 
 (ert-deftest rjd/smoke-gcal-fetches-into-the-agenda-s-calendar-file ()

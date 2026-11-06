@@ -39,10 +39,10 @@
 ;; nil: it comes before message's in a compose buffer and would offer
 ;; every contact again.
 ;;
-;; The file lives in `rjd/mail-contacts-directory', `~/Sync/emacs/'
-;; where ~/Sync is a Syncthing folder, so the list is the same on every
-;; machine; elsewhere -- a work machine, or the claude-dev container,
-;; which does not mount ~/Sync -- it is kept in ~/.  Never in
+;; The file lives in `rjd/mail-contacts-directory', the emacs/
+;; directory in init.el's `rjd/sync-directory' where that exists, so
+;; the list is the same on every machine that syncs it; elsewhere it is
+;; kept in ~/.  Never in
 ;; `user-emacs-directory', ecomplete's default: that is this public
 ;; repository's working tree, and the file is a list of addresses.
 ;; Saving rewrites the whole file, so two machines adding within one
@@ -76,13 +76,24 @@
   "Address completion from the people written to."
   :group 'mail)
 
-(defcustom rjd/mail-contacts-directory
-  (if (file-exists-p "~/Sync/.stfolder") "~/Sync/emacs/" "~/")
+(defvar rjd/sync-directory)
+
+(defun rjd/mail-contacts-default-directory ()
+  "The default `rjd/mail-contacts-directory'.
+The emacs/ directory in `rjd/sync-directory', which init.el declares,
+where that directory exists, so that every machine syncing it
+completes the same addresses; ~/ elsewhere, or without init.el.  The
+test is the synced directory itself, not a marker of what syncs it, so
+that a folder kept by a sync tool other than Syncthing counts too."
+  (if (and (bound-and-true-p rjd/sync-directory)
+           (file-directory-p rjd/sync-directory))
+      (file-name-as-directory (file-name-concat rjd/sync-directory "emacs"))
+    "~/"))
+
+(defcustom rjd/mail-contacts-directory (rjd/mail-contacts-default-directory)
   "The directory that holds the completion list, `rjd/mail-contacts-file'.
-By default ~/Sync/emacs/ where ~/Sync is a Syncthing folder, so that
-every machine completes the same addresses, and ~/ elsewhere.  The
-test is Syncthing's own marker rather than the directory, which other
-configuration creates even where nothing syncs it."
+By default the emacs/ directory in `rjd/sync-directory' where that
+exists, and ~/ elsewhere: see `rjd/mail-contacts-default-directory'."
   :type 'directory
   :group 'rjd/mail-contacts)
 

@@ -46,6 +46,23 @@ without `dotfiles` has no `private.el` at all.
 in by the `setup` repo's `org-sync` role.  It is gitignored, so anything
 loaded from it must tolerate being absent.
 
+## Synced directory
+
+Everything `init.el` keeps in step between machines -- abbrevs, denote's
+notes, the mail contacts list, elfeed's database, the alphapapa links
+capture file, the combined `.ics` export, rjd-jira's file -- is built
+from one directory, `rjd/sync-directory`, `~/Sync/` (the personal
+Syncthing folder) by default.  A machine that never joins that folder
+sets its stand-in in `private.el` with a plain `setq`: `private.el` is
+loaded right after `custom.el`, before any form that reads the
+directory, and the defcustom is declared just before that load, so
+nothing needs to read it lazily.  It is read only at startup.  Never
+write `~/Sync` into `init.el` or `user-lisp/` again: build the path
+from `rjd/sync-directory`.  (`private.el`'s own `~/Sync` paths, for
+packages only personal machines load, are its own business.)  The
+smoke test's "Synced directory" assertions check every path, with the
+default and with another directory.
+
 ## Smoke test
 
 `test/smoke-test.el` loads the whole config in batch and checks what it
@@ -201,9 +218,10 @@ view or headers buffer adds the sender; `rjd/mail-contacts-seed` fills
 the list once from the Sent folders, through `mu find`.  message's own
 ecomplete learning (`message-mail-alias-type`) is deliberately left
 off, since it learns From, Reply-To and Bcc.  The list is a file of
-addresses, so it lives in `rjd/mail-contacts-directory`, `~/Sync/emacs/`
-where `~/Sync` is a Syncthing folder and `~/` elsewhere -- never in
-this working tree, ecomplete's default.  It is enabled from mu4e's
+addresses, so it lives in `rjd/mail-contacts-directory`: the `emacs/`
+directory in `rjd/sync-directory` (see Synced directory) where that
+directory exists, whatever syncs it, and `~/` where it does not --
+never in this working tree, ecomplete's default.  It is enabled from mu4e's
 form.  ERT tests: `test/rjd-mail-contacts-test.el`.
 
 ## Calendar
