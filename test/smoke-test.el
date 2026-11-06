@@ -605,6 +605,86 @@ the package is not loaded before then."
     (should (eq rjd/caldav-enabled 'auto))
     (should-not (rjd/caldav-active-p))))
 
+
+;;; agent-shell
+
+(ert-deftest rjd/smoke-agent-shell-runs-in-claude-dev-without-a-map ()
+  "Without a container map every shell starts in claude-dev, as before.
+The prefix is read from what `:custom' recorded, not by loading
+agent-shell, whose `:config' starts the budget's timer.  The map file
+is one that does not exist, never the real one."
+  (require 'rjd-container)
+  (let* ((recorded (get 'agent-shell-command-prefix 'theme-value))
+         (prefix (eval (cadr (assq 'use-package recorded)) t))
+         (rjd/container-map-file (make-temp-name
+                                  (expand-file-name "rjd-smoke-no-map"
+                                                    temporary-file-directory)))
+         (process-environment (cons "CLAUDE_CONTAINER" process-environment)))
+    (should (eq prefix #'rjd/container-agent-shell-prefix))
+    (dolist (dir (list rjd/smoke-checkout temporary-file-directory))
+      (with-temp-buffer
+        (setq default-directory dir)
+        (should (equal (funcall prefix (current-buffer))
+                       '("docker" "exec" "-i" "claude-dev")))))))
+
+
+;;; Git through the container
+
+(ert-deftest rjd/smoke-commit-editor-is-signalled-in-the-map-s-container ()
+  "Finishing a commit message signals the editor where the map says.
+The advice is defined from `:preface' even inside a container, where
+its form is otherwise skipped, so it is called directly here.  The
+engine is a script that records its arguments, and the map a temporary
+one naming a second container for a temporary directory."
+  (require 'rjd-container)
+  (require 'with-editor)
+  (let* ((dir (file-name-as-directory
+               (file-truename (make-temp-file "rjd-smoke-git" t))))
+         (owned (expand-file-name "owned/.git/" dir))
+         (unowned (expand-file-name "unowned/.git/" dir))
+         (args (expand-file-name "args" dir))
+         (engine (expand-file-name "engine" dir))
+         (rjd/container-map-file (expand-file-name "containers" dir))
+         (process-environment (append (list (concat "CONTAINER_RUNTIME="
+                                                    engine)
+                                            "CLAUDE_CONTAINER")
+                                      process-environment))
+         returned)
+    (unwind-protect
+        (progn
+          (make-directory owned t)
+          (make-directory unowned t)
+          (with-temp-file engine
+            (insert "#!/bin/sh\necho \"$@\" > " (shell-quote-argument args) "\n"))
+          (set-file-modes engine #o700)
+          (with-temp-file rjd/container-map-file
+            (insert (expand-file-name "owned" dir) " claude-second\n"))
+          (dolist (case `((,owned nil "USR1") (,owned t "USR2")))
+            (with-temp-buffer
+              (setq default-directory (car case))
+              (setq-local with-editor--pid "4242")
+              (rjd/with-editor-return-in-container
+               (lambda (cancel) (setq returned (list cancel with-editor--pid)))
+               (cadr case))
+              ;; with-editor's own return saw no PID, so sent no host kill.
+              (should (equal returned (list (cadr case) nil)))
+              (should (equal (with-temp-buffer
+                               (insert-file-contents args)
+                               (buffer-string))
+                             (format "exec claude-second sh -c kill -s \"$0\" \"$1\" %s 4242\n"
+                                     (nth 2 case))))))
+          (delete-file args)
+          (with-temp-buffer
+            (setq default-directory unowned)
+            (setq-local with-editor--pid "4242")
+            (rjd/with-editor-return-in-container
+             (lambda (cancel) (setq returned (list cancel with-editor--pid)))
+             nil)
+            ;; Unowned: with-editor signals the PID itself, on this host.
+            (should (equal returned '(nil "4242")))
+            (should-not (file-exists-p args))))
+      (delete-directory dir t))))
+
 (ert-run-tests-batch-and-exit)
 
 ;;; smoke-test.el ends here

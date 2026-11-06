@@ -57,12 +57,22 @@ handles and how to add an assertion.
 ## agent-shell
 
 Claude Code is driven from Emacs through `agent-shell`, which does not
-run the agent on this host: `agent-shell-command-prefix` is `docker exec
--i claude-dev`, so every command lands inside the `claude-dev`
-container.  `~/projects` is mounted at the same path inside and out, so
-path translation is the identity and no resolver function is needed.
-The subscription login lives in a volume in that container; agent-shell
-itself holds no API key.
+run the agent on this host: `agent-shell-command-prefix` is
+`rjd/container-agent-shell-prefix` (user-lisp `rjd-container`), a
+function of the shell's buffer that agent-shell calls, giving `docker
+exec -i CONTAINER`.  CONTAINER is the one claude-container's
+**container map**, `~/.config/claude-container/containers`, gives the
+buffer's `default-directory`: `DIRECTORY CONTAINER` lines, `~` for
+`$HOME`, blank lines and `#` comments ignored, the longest containing
+directory winning.  Where the map names none, or there is no map, it is
+`claude-dev`, so a machine without the file behaves as before;
+`$CLAUDE_CONTAINER` overrides both.  The map is written by the `setup`
+playbook, outside `~/projects`, since an agent that could edit it could
+send host git for its repos to the host.  Each container mounts its
+directory at the same path inside and out, so path translation is the
+identity and no resolver function is needed.  The subscription login
+lives in a volume in the container; agent-shell itself holds no API
+key.  ERT tests: `test/rjd-container-test.el`.
 
 Two local packages add things agent-shell has no concept of.
 `rjd-agent-shell-budget` puts the 5-hour and weekly subscription windows
@@ -71,6 +81,10 @@ in the header, which agent-shell cannot know because the ACP
 `rjd-agent-shell-version` puts the running Claude Code version there,
 which agent-shell cannot know because it keeps only `agentCapabilities`
 and `modes` from the ACP `initialize` response and drops `agentInfo`.
+Both reach the container through `agent-shell-command-prefix`, calling
+it with the current buffer as agent-shell does with the shell's; their
+caches are global, so with two containers they show whichever answered
+first.
 
 Both advise `agent-shell--make-header-model`, a private function, so an
 agent-shell upgrade can break them — and does so *silently*, by the
@@ -277,11 +291,19 @@ On the host, Magit and vc run git through claude-container's
 `container-git` wrapper (`rjd/container-git` in `init.el`), so a repo's
 agent-writable `.git/config` and hooks execute inside the container, not
 as the host user.  It is nil, and git is plain git, inside the container
-and on a machine without that checkout.
+and on a machine without that checkout.  The wrapper picks the container
+by the same container map as agent-shell (see agent-shell above), and
+runs git on the host for a directory the map does not list; without the
+map, `~/projects` goes to `claude-dev` and the rest runs on the host.
+The map is parsed twice, in the wrapper's sh and in `rjd-container`, so
+the two must agree: claude-container's `tests/container-git-test.sh`
+and `test/rjd-container-test.el` check the same cases.
 
 Commit editing depends on with-editor's private `with-editor--pid`:
 `rjd/with-editor-return-in-container` takes the PID from it so that
-with-editor's own host-side `kill` never sees a container PID.  If a
+with-editor's own host-side `kill` never sees a container PID, and
+signals it in the container the map gives the buffer's directory -- the
+one `container-git` ran the waiting git in.  If a
 with-editor upgrade stops reading it there, that `kill` would signal
 whichever *host* process has the number.  After upgrading with-editor,
 recheck that `with-editor-return` still reads `with-editor--pid` before

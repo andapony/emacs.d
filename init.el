@@ -1074,14 +1074,16 @@ copies."
 
 ;;; Version control
 
-;; On the host, git for anything under ~/projects runs inside the claude-dev
+;; On the host, git for a repo an agent container mounts runs inside that
 ;; container, through claude-container's `container-git' wrapper.  The agent
 ;; can write every repo there, .git/ included, and a repo's own config and
 ;; hooks decide what git executes -- `core.fsmonitor' alone runs on every
 ;; status, so merely visiting a file would run it as the host user, with the
-;; host's credentials.  The wrapper runs git locally for repos outside
-;; ~/projects, so this is safe to point everything at.  AGENT-ACCESS.md in
-;; claude-container has the reasoning.
+;; host's credentials.  Which container owns which directory is the
+;; container map, ~/.config/claude-container/containers; without it,
+;; ~/projects belongs to claude-dev.  The wrapper runs git locally for a
+;; repo the map does not list, so this is safe to point everything at.
+;; AGENT-ACCESS.md in claude-container has the reasoning.
 ;;
 ;; nil -- plain git -- inside the container itself, whose Emacs loads this
 ;; same file, and on a machine without a claude-container checkout.
@@ -1091,7 +1093,7 @@ copies."
          (not (file-exists-p "/run/.containerenv"))
          (file-executable-p wrapper)
          wrapper))
-  "The host's wrapper that runs git inside claude-dev, or nil.")
+  "The host's wrapper that runs git inside the agent containers, or nil.")
 
 ;; No :bind here.  `magit-define-global-key-bindings' defaults to `default',
 ;; so magit installs C-x g for `magit-status' and C-x M-g for
@@ -1116,32 +1118,34 @@ copies."
 ;; signal that never comes, and the host would instead send USR1, whose
 ;; default action is to terminate, to whichever of its own processes has
 ;; that number.  So the advice takes the PID before with-editor sees it and
-;; signals it in the container.  `with-editor--pid' is private: if a
+;; signals it in the container -- the one the container map gives for the
+;; buffer's directory, as `container-git' chose it for the git waiting on
+;; it (see rjd-container.el).  `with-editor--pid' is private: if a
 ;; with-editor upgrade changes how it is read, this is what to recheck.
 (use-package with-editor
   :defer t
   :if rjd/container-git
   :preface
   (defun rjd/with-editor-return-in-container (return cancel)
-    "Call RETURN with CANCEL, signalling the editor in claude-dev if it ran there.
-A buffer under ~/projects was opened by git running in the container, so
-the sleeping editor's PID belongs to the container rather than this host."
-    (let ((pid with-editor--pid))
-      (if (not (and pid
-                    (string-prefix-p
-                     (file-name-as-directory (file-truename "~/projects"))
-                     (file-truename default-directory))))
+    "Call RETURN with CANCEL, signalling the editor in its container if any.
+A buffer in a directory the container map gives a container was opened
+by git running in that container, as `container-git' runs it, so the
+sleeping editor's PID belongs to the container rather than this host."
+    (let ((pid with-editor--pid)
+          (container (rjd/container-for-directory default-directory)))
+      (if (not (and pid container))
           (funcall return cancel)
         (setq with-editor--pid nil)
         (funcall return cancel)
-        ;; The same environment overrides `container-git' honours.
+        ;; The engine override `container-git' honours; its
+        ;; CLAUDE_CONTAINER, `rjd/container-for-directory' has applied.
         (unless (eql 0 (call-process
                         (or (getenv "CONTAINER_RUNTIME") "docker") nil nil nil
-                        "exec" (or (getenv "CLAUDE_CONTAINER") "claude-dev")
+                        "exec" container
                         "sh" "-c" "kill -s \"$0\" \"$1\""
                         (if cancel "USR2" "USR1") pid))
-          (message "Could not signal git's editor (PID %s) in the container"
-                   pid)))))
+          (message "Could not signal git's editor (PID %s) in %s"
+                   pid container)))))
   :custom
   (with-editor-emacsclient-executable nil)
   :config
@@ -1792,8 +1796,12 @@ whatever another machine has synced in since."
                   mode-line-end-spaces)))
   :custom
   ;; ── Container execution ──────────────────────────────────────────
-  ;; -i is required: acp.el speaks JSON-RPC over the adapter's stdin.
-  (agent-shell-command-prefix '("docker" "exec" "-i" "claude-dev"))
+  ;; A function of the shell's buffer, which agent-shell calls with it:
+  ;; the shell starts in the container that owns its directory by
+  ;; claude-container's container map -- the one `container-git' runs
+  ;; git in there -- and in claude-dev where the map names none or
+  ;; there is no map.  rjd-container.el has the rules.
+  (agent-shell-command-prefix #'rjd/container-agent-shell-prefix)
 
   ;; Identity mount (~/projects at same path inside/out) makes path
   ;; translation the identity — no resolver function needed.
