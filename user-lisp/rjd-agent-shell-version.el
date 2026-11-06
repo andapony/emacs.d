@@ -30,6 +30,13 @@
 ;;
 ;; Enable with `rjd/agent-shell-version-mode'.
 ;;
+;; Each container's version is its own.  Two containers built at
+;; different times run different adapters, so the version, the update
+;; check and their fetches in flight are all kept per container, keyed
+;; by the command prefix that reaches it
+;; (`rjd/agent-shell-version--command-prefix'), and each shell's header
+;; shows its own container's.
+;;
 ;; CAVEAT: like `rjd-agent-shell-budget', this leans on a private
 ;; interface.  It advises `agent-shell--make-header-model' to extend the
 ;; header model's `:buffer-name' field.  If the version disappears from
@@ -130,21 +137,27 @@ the install replaces wholesale."
 ;;; Fetching
 
 (defvar rjd/agent-shell-version--cache nil
-  "Cons of (VERSION . FETCH-TIME), or nil before the first fetch.")
+  "Alist of (PREFIX VERSION . FETCH-TIME), one per container.
+A container has no entry before its first fetch.")
 
 (defvar rjd/agent-shell-version--update-cache nil
-  "Cons of ((INSTALLED . LATEST) . FETCH-TIME), or nil before the first fetch.")
+  "Alist of (PREFIX (INSTALLED . LATEST) . FETCH-TIME), one per container.
+A container has no entry before its first check.")
 
 (defvar rjd/agent-shell-version--in-flight nil
-  "Non-nil while a version fetch is outstanding.")
+  "Prefixes whose version fetch is outstanding.")
 
 (defvar rjd/agent-shell-version--update-in-flight nil
-  "Non-nil while an adapter update check is outstanding.
+  "Prefixes whose adapter update check is outstanding.
 Separate from `rjd/agent-shell-version--in-flight' so the slow,
 network-bound check cannot block the cheap local one behind it.")
 
 (defvar rjd/agent-shell-version--install-in-flight nil
   "Non-nil while an adapter install is running.")
+
+(defun rjd/agent-shell-version--get (cache prefix)
+  "Return PREFIX's entry in CACHE, an alist keyed by command prefix."
+  (alist-get prefix cache nil nil #'equal))
 
 (defun rjd/agent-shell-version--stale-p (cache ttl)
   "Return non-nil when CACHE was fetched more than TTL seconds ago.
@@ -186,23 +199,28 @@ arrives from a background process has to poke each buffer itself."
 agent-shell takes a function of the buffer there as well as a list, and
 calls it with the shell's buffer.  This calls it with whichever buffer
 is current: the shell's when the header asks for the version, since
-the header is drawn in the shell's buffer."
+the header is drawn in the shell's buffer.
+
+The prefix names the container the agent runs in, so it is also the key
+every cache here is held under: nil, for an agent on this host, is a
+key like any other."
   (when (boundp 'agent-shell-command-prefix)
     (if (functionp agent-shell-command-prefix)
         (funcall agent-shell-command-prefix (current-buffer))
       agent-shell-command-prefix)))
 
-(defun rjd/agent-shell-version--run (name command callback)
+(defun rjd/agent-shell-version--run (name prefix command callback)
   "Run COMMAND asynchronously under NAME and call CALLBACK with its output.
-COMMAND is prefixed with `agent-shell-command-prefix' so it lands
-wherever the agent runs.  CALLBACK receives the collected stdout, or nil
-if the process failed to start or exited non-zero -- so a caller has a
-single place to clear its in-flight flag and stamp its cache.
+COMMAND is prefixed with PREFIX, a value of `agent-shell-command-prefix',
+so it lands wherever that agent runs.  CALLBACK receives the collected
+stdout, or nil if the process failed to start or exited non-zero -- so a
+caller has a single place to clear its in-flight flag and stamp its
+cache, which it keeps under PREFIX.
 
 Asynchronous because the prefix may be a `docker exec', and the update
 check additionally talks to a registry; either would be felt on the
 redisplay path that renders the header."
-  (let ((full (append (rjd/agent-shell-version--command-prefix) command))
+  (let ((full (append prefix command))
         (output ""))
     (condition-case nil
         (make-process
@@ -226,60 +244,76 @@ redisplay path that renders the header."
     nil))
 
 ;;;###autoload
-(defun rjd/agent-shell-version-refresh ()
-  "Ask Claude Code for its version asynchronously and redraw the headers."
+(defun rjd/agent-shell-version-refresh (&optional prefix)
+  "Ask Claude Code for its version asynchronously and redraw the headers.
+Asks the agent PREFIX reaches, by default the current buffer's, and
+keeps the answer as that container's."
   (interactive)
-  (unless rjd/agent-shell-version--in-flight
-    (setq rjd/agent-shell-version--in-flight t)
-    (rjd/agent-shell-version--run
-     "rjd-agent-shell-version"
-     rjd/agent-shell-version-command
-     (lambda (output)
-       (setq rjd/agent-shell-version--in-flight nil)
-       ;; A failed fetch still stamps the cache, so a host with no agent
-       ;; installed retries once per TTL rather than on every render.
-       (setq rjd/agent-shell-version--cache
-             (cons (rjd/agent-shell-version--parse output) (current-time)))
-       (rjd/agent-shell-version--refresh-headers)))))
+  (let ((prefix (or prefix (rjd/agent-shell-version--command-prefix))))
+    (unless (member prefix rjd/agent-shell-version--in-flight)
+      (push prefix rjd/agent-shell-version--in-flight)
+      (rjd/agent-shell-version--run
+       "rjd-agent-shell-version"
+       prefix
+       rjd/agent-shell-version-command
+       (lambda (output)
+         (setq rjd/agent-shell-version--in-flight
+               (delete prefix rjd/agent-shell-version--in-flight))
+         ;; A failed fetch still stamps the cache, so a host with no agent
+         ;; installed retries once per TTL rather than on every render.
+         (setf (alist-get prefix rjd/agent-shell-version--cache nil nil #'equal)
+               (cons (rjd/agent-shell-version--parse output) (current-time)))
+         (rjd/agent-shell-version--refresh-headers))))))
 
 ;;;###autoload
-(defun rjd/agent-shell-version-check-update (&optional report)
+(defun rjd/agent-shell-version-check-update (&optional report prefix)
   "Check whether a newer ACP adapter release is available.
 With REPORT, which is always set interactively, echo the outcome when
 it arrives.  The header shows only a bare indicator, and the graphical
 header cannot carry the tooltip that names the versions, so this is
-where they can be read."
+where they can be read.  Checks the adapter installed where PREFIX
+lands, by default the current buffer's, and keeps the answer as that
+container's."
   (interactive (list t))
-  (if rjd/agent-shell-version--update-in-flight
-      (when report
-        (message "An adapter update check is already running"))
-    (setq rjd/agent-shell-version--update-in-flight t)
-    (rjd/agent-shell-version--run
-     "rjd-agent-shell-version-update"
-     rjd/agent-shell-version-update-command
-     (lambda (output)
-       (let ((pair (rjd/agent-shell-version--parse-update output)))
-         (setq rjd/agent-shell-version--update-in-flight nil)
-         (setq rjd/agent-shell-version--update-cache (cons pair (current-time)))
-         (rjd/agent-shell-version--refresh-headers)
-         (when report
-           (cond ((null pair)
-                  (message "Could not compare adapter versions; is the npm registry reachable?"))
-                 ((equal (car pair) (cdr pair))
-                  (message "claude-agent-acp %s is the latest release" (car pair)))
-                 (t
-                  (message "claude-agent-acp %s available (installed %s); M-x rjd/agent-shell-version-install-update"
-                           (cdr pair) (car pair))))))))))
+  (let ((prefix (or prefix (rjd/agent-shell-version--command-prefix))))
+    (if (member prefix rjd/agent-shell-version--update-in-flight)
+        (when report
+          (message "An adapter update check is already running"))
+      (push prefix rjd/agent-shell-version--update-in-flight)
+      (rjd/agent-shell-version--run
+       "rjd-agent-shell-version-update"
+       prefix
+       rjd/agent-shell-version-update-command
+       (lambda (output)
+         (let ((pair (rjd/agent-shell-version--parse-update output)))
+           (setq rjd/agent-shell-version--update-in-flight
+                 (delete prefix rjd/agent-shell-version--update-in-flight))
+           (setf (alist-get prefix rjd/agent-shell-version--update-cache
+                            nil nil #'equal)
+                 (cons pair (current-time)))
+           (rjd/agent-shell-version--refresh-headers)
+           (when report
+             (cond ((null pair)
+                    (message "Could not compare adapter versions; is the npm registry reachable?"))
+                   ((equal (car pair) (cdr pair))
+                    (message "claude-agent-acp %s is the latest release" (car pair)))
+                   (t
+                    (message "claude-agent-acp %s available (installed %s); M-x rjd/agent-shell-version-install-update"
+                             (cdr pair) (car pair)))))))))))
 
 (defun rjd/agent-shell-version-update-available-p ()
   "Return the newer adapter version when one exists, else nil.
-Kicks off a check when the cached answer has aged out."
-  (when (rjd/agent-shell-version--stale-p rjd/agent-shell-version--update-cache
-                                          rjd/agent-shell-version-update-ttl)
-    (rjd/agent-shell-version-check-update))
-  (when-let* ((pair (car rjd/agent-shell-version--update-cache))
-              ((not (equal (car pair) (cdr pair)))))
-    (cdr pair)))
+For the current buffer's container.  Kicks off a check when its cached
+answer has aged out."
+  (let* ((prefix (rjd/agent-shell-version--command-prefix))
+         (cache (rjd/agent-shell-version--get
+                 rjd/agent-shell-version--update-cache prefix)))
+    (when (rjd/agent-shell-version--stale-p cache
+                                            rjd/agent-shell-version-update-ttl)
+      (rjd/agent-shell-version-check-update nil prefix))
+    (when-let* ((pair (car cache))
+                ((not (equal (car pair) (cdr pair)))))
+      (cdr pair))))
 
 ;;;###autoload
 (defun rjd/agent-shell-version-install-update ()
@@ -302,7 +336,9 @@ takes whatever is latest now, so the version named is a floor."
   (interactive)
   (when rjd/agent-shell-version--install-in-flight
     (user-error "An adapter install is already running"))
-  (let ((pair (car rjd/agent-shell-version--update-cache)))
+  (let* ((prefix (rjd/agent-shell-version--command-prefix))
+         (pair (car (rjd/agent-shell-version--get
+                     rjd/agent-shell-version--update-cache prefix))))
     (unless (y-or-n-p
              (cond ((null pair)
                     "Latest adapter version unknown; install claude-agent-acp@latest anyway? ")
@@ -312,63 +348,69 @@ takes whatever is latest now, so the version named is a floor."
                    (t
                     (format "Install claude-agent-acp %s (installed %s)? "
                             (cdr pair) (car pair)))))
-      (user-error "Adapter install cancelled")))
-  (let ((buffer (get-buffer-create "*rjd-agent-shell-version-install*")))
-    (with-current-buffer buffer
-      (let ((inhibit-read-only t))
-        (erase-buffer))
-      (special-mode))
-    (display-buffer buffer)
-    (setq rjd/agent-shell-version--install-in-flight t)
-    (condition-case err
-        (make-process
-         :name "rjd-agent-shell-version-install"
-         :buffer buffer
-         :command (append (rjd/agent-shell-version--command-prefix)
-                          rjd/agent-shell-version-install-command)
-         :noquery t
-         :connection-type 'pipe
-         ;; `special-mode' makes the buffer read-only, so output has to
-         ;; be inserted past that rather than by the default filter.
-         :filter (lambda (process chunk)
-                   (when (buffer-live-p (process-buffer process))
-                     (with-current-buffer (process-buffer process)
-                       (let ((inhibit-read-only t))
-                         (goto-char (point-max))
-                         (insert chunk)))))
-         :sentinel
-         (lambda (process _event)
-           (unless (process-live-p process)
-             (setq rjd/agent-shell-version--install-in-flight nil)
-             (if (not (zerop (process-exit-status process)))
-                 (message "ACP adapter install failed; see %s"
-                          (buffer-name buffer))
-               (rjd/agent-shell-version-refresh)
-               (rjd/agent-shell-version-check-update)
-               (let ((open (seq-count (lambda (b)
-                                        (with-current-buffer b
-                                          (derived-mode-p 'agent-shell-mode)))
-                                      (buffer-list))))
-                 (message "ACP adapter updated%s"
-                          (if (zerop open)
-                              ""
-                            (format "; restart %d open shell%s to use it"
-                                    open (if (= open 1) "" "s")))))))))
-      (error
-       (setq rjd/agent-shell-version--install-in-flight nil)
-       (signal (car err) (cdr err))))))
+      (user-error "Adapter install cancelled"))
+    (let ((buffer (get-buffer-create "*rjd-agent-shell-version-install*")))
+      (with-current-buffer buffer
+        (let ((inhibit-read-only t))
+          (erase-buffer))
+        (special-mode))
+      (display-buffer buffer)
+      (setq rjd/agent-shell-version--install-in-flight t)
+      (condition-case err
+          (make-process
+           :name "rjd-agent-shell-version-install"
+           :buffer buffer
+           :command (append prefix rjd/agent-shell-version-install-command)
+           :noquery t
+           :connection-type 'pipe
+           ;; `special-mode' makes the buffer read-only, so output has to
+           ;; be inserted past that rather than by the default filter.
+           :filter (lambda (process chunk)
+                     (when (buffer-live-p (process-buffer process))
+                       (with-current-buffer (process-buffer process)
+                         (let ((inhibit-read-only t))
+                           (goto-char (point-max))
+                           (insert chunk)))))
+           :sentinel
+           (lambda (process _event)
+             (unless (process-live-p process)
+               (setq rjd/agent-shell-version--install-in-flight nil)
+               (if (not (zerop (process-exit-status process)))
+                   (message "ACP adapter install failed; see %s"
+                            (buffer-name buffer))
+                 (rjd/agent-shell-version-refresh prefix)
+                 (rjd/agent-shell-version-check-update nil prefix)
+                 (let ((open (seq-count (lambda (b)
+                                          (with-current-buffer b
+                                            (derived-mode-p 'agent-shell-mode)))
+                                        (buffer-list))))
+                   (message "ACP adapter updated%s"
+                            (if (zerop open)
+                                ""
+                              (format "; restart %d open shell%s to use it"
+                                      open (if (= open 1) "" "s")))))))))
+        (error
+         (setq rjd/agent-shell-version--install-in-flight nil)
+         (signal (car err) (cdr err)))))))
 
 (defun rjd/agent-shell-version-string ()
   "Return the formatted Claude Code version, or nil if it is not known yet.
-Carries the update indicator when a newer adapter release is available.
+The version is that of the current buffer's container.  Carries the
+update indicator when a newer adapter release is available there.
 
 Kicks off a refresh when the cached value has aged out, and answers from
 the cache meanwhile, so the header shows the previous version rather than
 flickering empty while the new one is fetched."
-  (when (rjd/agent-shell-version--stale-p rjd/agent-shell-version--cache
-                                          rjd/agent-shell-version-ttl)
-    (rjd/agent-shell-version-refresh))
-  (when-let* ((version (car rjd/agent-shell-version--cache)))
+  (let* ((prefix (rjd/agent-shell-version--command-prefix))
+         (cache (rjd/agent-shell-version--get
+                 rjd/agent-shell-version--cache prefix)))
+    (when (rjd/agent-shell-version--stale-p cache rjd/agent-shell-version-ttl)
+      (rjd/agent-shell-version-refresh prefix))
+    (rjd/agent-shell-version--format (car cache))))
+
+(defun rjd/agent-shell-version--format (version)
+  "Return VERSION formatted for the header, or nil when VERSION is nil."
+  (when version
     (concat (format rjd/agent-shell-version-format version)
             ;; help-echo reaches the text header only: the graphical
             ;; header rasterises to an SVG image, which carries no text
