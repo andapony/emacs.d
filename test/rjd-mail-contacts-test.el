@@ -64,6 +64,42 @@ The user's own address is me@example.net."
      ,@body))
 
 
+;;; Where the list lives
+
+(defvar rjd/sync-directory)
+
+(ert-deftest rjd/mail-contacts-directory-is-in-the-synced-directory ()
+  "Where the synced directory exists, the list is in its emacs/ directory.
+No Syncthing marker is needed, so a folder another tool syncs counts."
+  (let ((rjd/sync-directory (make-temp-file "rjd-sync" t)))
+    (unwind-protect
+        (progn
+          (should-not (file-exists-p
+                       (file-name-concat rjd/sync-directory ".stfolder")))
+          (should (equal (rjd/mail-contacts-default-directory)
+                         (file-name-as-directory
+                          (file-name-concat rjd/sync-directory "emacs")))))
+      (delete-directory rjd/sync-directory t))))
+
+(ert-deftest rjd/mail-contacts-directory-is-the-default-one-unset ()
+  "With the default synced directory, the list is in ~/Sync/emacs/."
+  (let ((rjd/sync-directory "~/Sync/"))
+    (cl-letf (((symbol-function 'file-directory-p)
+               (lambda (dir) (equal dir "~/Sync/"))))
+      (should (equal (rjd/mail-contacts-default-directory)
+                     "~/Sync/emacs/")))))
+
+(ert-deftest rjd/mail-contacts-directory-falls-back-to-home ()
+  "Where the synced directory does not exist, the list is kept in ~/."
+  (let ((rjd/sync-directory "/nonexistent-rjd-contacts/Sync/"))
+    (should (equal (rjd/mail-contacts-default-directory) "~/"))))
+
+(ert-deftest rjd/mail-contacts-directory-without-init-el-is-home ()
+  "Loaded without init.el, which declares the synced directory, it is ~/."
+  (skip-unless (not (boundp 'rjd/sync-directory)))
+  (should (equal (rjd/mail-contacts-default-directory) "~/")))
+
+
 ;;; Writing an address
 
 (ert-deftest rjd/mail-contacts-text-plain-and-quoted ()

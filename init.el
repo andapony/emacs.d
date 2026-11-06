@@ -51,6 +51,28 @@
     (write-region "" nil custom-file))
   (load custom-file))
 
+;;; Synced directory
+
+;;
+;; Everything kept in step between machines -- abbrevs, notes, the
+;; contacts list, the feeds database, the exported calendar -- lives
+;; under one directory, which every such path below is built from.  It
+;; is ~/Sync, the personal Syncthing folder, by default; a machine that
+;; never joins that folder points it at its own stand-in from
+;; private.el, with a plain `setq'.  That works because private.el is
+;; loaded just below, before any form that reads the directory is
+;; evaluated: the `:custom' values below are evaluated as init.el reads
+;; them, or later still, when their package loads.  The defcustom comes
+;; first, so that `setq' simply replaces its default.
+(defcustom rjd/sync-directory "~/Sync/"
+  "The directory synced between machines, which every synced path is under.
+Abbrevs, denote's notes, the mail contacts list, elfeed's database, the
+alphapapa links and the combined .ics export are all built from it, as
+init.el loads.  Set it in private.el, with `setq', on a machine whose
+synced folder is somewhere else; it is read only at startup."
+  :type 'directory
+  :group 'environment)
+
 ;;; Private settings
 
 ;;
@@ -200,18 +222,19 @@ everywhere else."
 
 (use-package abbrev
   :custom
-  ;; Kept in ~/Sync so that a typo fixed on one machine is fixed on all of
-  ;; them.  A machine without ~/Sync -- a work one, or the claude-dev
-  ;; container -- keeps its own in ~/.
-  (abbrev-file-name (if (file-directory-p "~/Sync")
-                        "~/Sync/emacs/abbrev_defs"
+  ;; Kept in `rjd/sync-directory' so that a typo fixed on one machine is
+  ;; fixed on all of them.  A machine without that directory -- the
+  ;; claude-dev container, say -- keeps its own in ~/.
+  (abbrev-file-name (if (file-directory-p rjd/sync-directory)
+                        (file-name-concat rjd/sync-directory
+                                          "emacs/abbrev_defs")
                       "~/.abbrev_defs"))
   ;; Written on exit without asking, so an abbrev defined some other way
   ;; than `rjd/jinx-correct-and-abbrev' is kept too.
   (save-abbrevs 'silently)
   :config
-  ;; write-region does not create directories, so make ~/Sync/emacs before
-  ;; anything tries to save there.
+  ;; write-region does not create directories, so make the emacs/
+  ;; directory in `rjd/sync-directory' before anything tries to save there.
   (make-directory (file-name-directory abbrev-file-name) t)
   (setq-default abbrev-mode t))
 
@@ -636,14 +659,18 @@ traversing corrupts its iteration."
   ;; commands for editing it are kept from saving into custom.el, which
   ;; would override it -- see `rjd/org-agenda-files-for-session'.
   ;;
+  ;; The org files are the ones this machine syncs: those org-sync's
+  ;; list, ~/.config/org-sync/files, names, each in ~/org-agenda/, in the
+  ;; list's order -- or, without the list, the personal four, inbox.org,
+  ;; projects.org, areas.org and someday.org.  The setup repo writes the
+  ;; list, and rjd-org-files in user-lisp/ reads it, once, as org loads,
+  ;; so a changed list takes effect at the next start.
+  ;;
   ;; The last entry is `rjd/calendar-directory', every .org file in it:
   ;; the calendars, such as Google's, fetched by rjd-gcal (see
   ;; ";;; Calendar" below).
-  (org-agenda-files `("~/org-agenda/inbox.org"
-                      "~/org-agenda/projects.org"
-                      "~/org-agenda/areas.org"
-                      "~/org-agenda/someday.org"
-                      ,rjd/calendar-directory))
+  (org-agenda-files (append (rjd/org-files-agenda-files)
+                            (list rjd/calendar-directory)))
   (org-directory "~/org-agenda")
   (org-ellipsis "…")
   (org-hide-emphasis-markers t)
@@ -710,15 +737,17 @@ traversing corrupts its iteration."
   (org-agenda-todo-ignore-scheduled 'all)
   (org-agenda-window-setup 'current-window)
   (org-deadline-warning-days 21)
+  ;; The inbox view reads every inbox org-sync's list names, inbox.org
+  ;; and cetos-inbox.org, whichever are listed -- see `org-agenda-files'.
   (org-agenda-custom-commands
-   '(("d" "Dashboard"
+   `(("d" "Dashboard"
       ((agenda "" ((org-agenda-span 7)))
        (todo "NEXT"
              ((org-agenda-overriding-header "Next Actions")))
        (todo "WAITING"
              ((org-agenda-overriding-header "Waiting For")))
        (todo "TODO"
-             ((org-agenda-files '("~/org-agenda/inbox.org"))
+             ((org-agenda-files ',(rjd/org-files-inboxes))
               (org-agenda-overriding-header "Inbox (process me)")))))))
   :config
   ;; Google and CalDAV calendars in the agenda, from rjd-gcal and
@@ -745,22 +774,26 @@ buffer, is left out, as it was before this existed."
                  (string-prefix-p "[[mu4e:msgid:" annotation))
         (concat "\n  " annotation))))
   :custom
+  ;; `i' and `N' capture into inbox.org where org-sync's list names it,
+  ;; and otherwise into cetos-inbox.org; where it names both, `w'
+  ;; captures into cetos-inbox.org.  See `org-agenda-files' above.
   (org-capture-templates
-   '(("n" "New note (with Denote)" plain
+   `(("n" "New note (with Denote)" plain
       (file denote-last-path)
       #'denote-org-capture :jump-to-captured t :kill-buffer t :no-save t :immediate-finish nil)
      ("i" "Inbox" entry
-      (file "~/org-agenda/inbox.org")
+      (file ,(rjd/org-files-capture-inbox))
       "* TODO %?\n  %U" :prepend nil :empty-lines 1)
      ("N" "Note" entry
-      (file "~/org-agenda/inbox.org")
+      (file ,(rjd/org-files-capture-inbox))
       "* %?\n  %U" :prepend nil :empty-lines 1)
      ;; `org-web-tools--url-as-readable-org' is private.  A rename upstream
      ;; takes this template out with a void-function error at capture time,
      ;; not at load, so it will look like a capture problem rather than a
      ;; dependency one.
      ("a" "Link to web page (alphapapa)" entry
-      (file+olp+datetree "~/Sync/org-more/alphapapa-links.org")
+      (file+olp+datetree
+       ,(file-name-concat rjd/sync-directory "org-more/alphapapa-links.org"))
       "%(org-web-tools--url-as-readable-org)" :empty-lines 1)
      ;; org-capture creates the "Cetos" heading at the end of the file if it
      ;; is missing, so this needs no setup in projects.org.  Captured from a
@@ -769,7 +802,13 @@ buffer, is left out, as it was before this existed."
      ("c" "Cetos task" entry
       (file+headline "~/org-agenda/projects.org" "Cetos")
       "* TODO %?\n  %U%(rjd/org-capture-mail-link)" :prepend nil :empty-lines 1)
-     )))
+     ;; Only where both inboxes are synced: elsewhere `i' already goes to
+     ;; the one there is.  Like `i', but linking back to a mail message
+     ;; as `c' does.
+     ,@(when-let* ((cetos-inbox (rjd/org-files-cetos-inbox)))
+         `(("w" "Cetos inbox" entry
+            (file ,cetos-inbox)
+            "* TODO %?\n  %U%(rjd/org-capture-mail-link)" :prepend nil :empty-lines 1))))))
 
 ;; Settings for `org-icalendar-combine-agenda-files', which writes the
 ;; combined .ics that the calendar subscribes to.  Nothing in this file
@@ -789,7 +828,8 @@ copies."
                        (org-agenda-files t))))
       (apply combine args)))
   :custom
-  (org-icalendar-combined-agenda-file "~/Sync/org/agenda.ics")
+  (org-icalendar-combined-agenda-file
+   (file-name-concat rjd/sync-directory "org/agenda.ics"))
   (org-icalendar-include-todo t)
   (org-icalendar-use-deadline '(event-if-todo event-if-not-todo))
   (org-icalendar-use-scheduled '(event-if-todo))
@@ -804,6 +844,14 @@ copies."
 (use-package ox-gfm
   :ensure t
   :after ox)
+
+;; Jira issues as org entries, from rjd-jira in user-lisp/, into a file
+;; that is synced like the rest.
+(use-package rjd-jira
+  :defer t
+  :custom
+  (rjd-jira/jira-org-path
+   (file-name-concat rjd/sync-directory "org/agenda/Jira.org")))
 
 ;; Loaded from vendor/, which the setup repo symlinks into place; tolerate
 ;; its absence so the rest of this file still loads on a bare checkout.
@@ -1313,7 +1361,7 @@ navigating by Go declarations."
   :ensure t
   :defer t
   :custom
-  (denote-directory "~/Sync/notes")
+  (denote-directory (file-name-concat rjd/sync-directory "notes"))
   :config
   ;; New Org notes export without a table of contents, which in a note
   ;; shared as Markdown is only clutter.  The line goes before the blank
@@ -1666,7 +1714,8 @@ the main view should not usually stop it."
   (rjd/mail-mode 1)
   ;; Addresses complete only from the people written to, learned from
   ;; each send, or added with C-c + -- not from every contact mu has
-  ;; indexed.  The list is in ~/Sync, so every machine shares it; run
+  ;; indexed.  The list is in `rjd/sync-directory' where that exists, so
+  ;; every machine shares it; run
   ;; `rjd/mail-contacts-seed' once to fill it from the mail already
   ;; sent.  user-lisp/rjd-mail-contacts.el has the rest.
   (rjd/mail-contacts-mode 1)
@@ -1709,7 +1758,7 @@ whatever another machine has synced in since."
     (elfeed)
     (elfeed-search-update :force))
   :custom
-  (elfeed-db-directory "~/Sync/elfeed")
+  (elfeed-db-directory (file-name-concat rjd/sync-directory "elfeed"))
   ;; The database sits in a synced directory, so it needs to be on disk by
   ;; the time the sync tool looks.  elfeed already saves it from
   ;; `quit-window-hook' and `kill-buffer-hook'; nil only stops it deferring

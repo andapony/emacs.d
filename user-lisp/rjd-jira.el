@@ -29,8 +29,9 @@
 ;; file still byte-compiles cleanly when it is absent.
 (declare-function jiralib2-jql-search "jiralib2")
 
-(defcustom rjd-jira/jira-org-path "~/Sync/org/agenda/Jira.org"
-  "The path to store the Jira contents in."
+(defcustom rjd-jira/jira-org-path (file-name-concat org-directory "Jira.org")
+  "The path to store the Jira contents in.
+init.el puts it in `rjd/sync-directory', so that it is synced."
   :type '(file :must-match t)
   :group 'rjd-jira)
 
