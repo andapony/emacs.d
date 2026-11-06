@@ -39,6 +39,10 @@
 ;;   the container cannot see.  It is cleared once init.el has loaded,
 ;;   even if the load fails.
 ;;
+;; org-sync's list of org files, ~/.config/org-sync/files, is never
+;; read: the run behaves as on a machine without one, whatever the host
+;; syncs.
+;;
 ;; Native compilation is turned off, along with the native compilation
 ;; `prepare-user-lisp' queues, so the run writes nothing into the main
 ;; checkout's eln-cache/.  Byte-compiling user-lisp/ still writes
@@ -121,6 +125,12 @@ with it.  Nil if git cannot say."
              "the main checkout, the one Emacs runs from")))
 
 (setq native-comp-jit-compilation nil)
+
+;; The agenda's and capture's files come from the host's org-sync list
+;; where it has one; the tests below expect the personal four of a
+;; machine without, so the list is one that never exists.  Set before
+;; rjd-org-files loads, its `defcustom' keeps the value.
+(setq rjd/org-files-list-file "/nonexistent-rjd-smoke/org-sync/files")
 (setq user-lisp-directory (file-name-concat rjd/smoke-checkout "user-lisp/"))
 
 ;; The steps `command-line' takes in an interactive session and skips in
@@ -175,6 +185,18 @@ A value saved in custom.el would win over init.el's `:custom'."
                    "~/org-agenda/areas.org"
                    "~/org-agenda/someday.org"
                    "~/org-agenda/calendars/"))))
+
+(ert-deftest rjd/smoke-refiling-offers-every-agenda-file ()
+  "Refiling offers every agenda file, whichever org-sync's list names."
+  (require 'org)
+  (should (equal org-refile-targets '((org-agenda-files :maxlevel . 3)))))
+
+(ert-deftest rjd/smoke-inbox-view-reads-the-inbox ()
+  "The dashboard's inbox view reads inbox.org, without org-sync's list."
+  (require 'org-agenda)
+  (should (equal (assq 'org-agenda-files
+                       (nth 2 (nth 3 (nth 2 (assoc "d" org-agenda-custom-commands)))))
+                 '(org-agenda-files '("~/org-agenda/inbox.org")))))
 
 (ert-deftest rjd/smoke-org-agenda-file-commands-do-not-save ()
   "Removing an agenda file changes the session but saves nothing.
@@ -463,6 +485,14 @@ file, and the capture is dated 2026-10-10 09:30."
                    '("c" "Cetos task" entry
                      (file+headline "~/org-agenda/projects.org" "Cetos"))))
     (should (equal (seq-drop cetos 5) '(:prepend nil :empty-lines 1)))))
+
+(ert-deftest rjd/smoke-inbox-capture-goes-to-inbox-org ()
+  "Without org-sync's list, `i' and `N' capture into inbox.org, and no `w'."
+  (require 'org-capture)
+  (dolist (key '("i" "N"))
+    (should (equal (nth 3 (assoc key org-capture-templates))
+                   '(file "~/org-agenda/inbox.org"))))
+  (should-not (assoc "w" org-capture-templates)))
 
 (ert-deftest rjd/smoke-cetos-capture-from-elsewhere-is-unchanged ()
   "Captured from a file, a Cetos task is just the TODO and its date.

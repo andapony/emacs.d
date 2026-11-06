@@ -636,14 +636,18 @@ traversing corrupts its iteration."
   ;; commands for editing it are kept from saving into custom.el, which
   ;; would override it -- see `rjd/org-agenda-files-for-session'.
   ;;
+  ;; The org files are the ones this machine syncs: those org-sync's
+  ;; list, ~/.config/org-sync/files, names, each in ~/org-agenda/, in the
+  ;; list's order -- or, without the list, the personal four, inbox.org,
+  ;; projects.org, areas.org and someday.org.  The setup repo writes the
+  ;; list, and rjd-org-files in user-lisp/ reads it, once, as org loads,
+  ;; so a changed list takes effect at the next start.
+  ;;
   ;; The last entry is `rjd/calendar-directory', every .org file in it:
   ;; the calendars, such as Google's, fetched by rjd-gcal (see
   ;; ";;; Calendar" below).
-  (org-agenda-files `("~/org-agenda/inbox.org"
-                      "~/org-agenda/projects.org"
-                      "~/org-agenda/areas.org"
-                      "~/org-agenda/someday.org"
-                      ,rjd/calendar-directory))
+  (org-agenda-files (append (rjd/org-files-agenda-files)
+                            (list rjd/calendar-directory)))
   (org-directory "~/org-agenda")
   (org-ellipsis "…")
   (org-hide-emphasis-markers t)
@@ -710,15 +714,17 @@ traversing corrupts its iteration."
   (org-agenda-todo-ignore-scheduled 'all)
   (org-agenda-window-setup 'current-window)
   (org-deadline-warning-days 21)
+  ;; The inbox view reads every inbox org-sync's list names, inbox.org
+  ;; and cetos-inbox.org, whichever are listed -- see `org-agenda-files'.
   (org-agenda-custom-commands
-   '(("d" "Dashboard"
+   `(("d" "Dashboard"
       ((agenda "" ((org-agenda-span 7)))
        (todo "NEXT"
              ((org-agenda-overriding-header "Next Actions")))
        (todo "WAITING"
              ((org-agenda-overriding-header "Waiting For")))
        (todo "TODO"
-             ((org-agenda-files '("~/org-agenda/inbox.org"))
+             ((org-agenda-files ',(rjd/org-files-inboxes))
               (org-agenda-overriding-header "Inbox (process me)")))))))
   :config
   ;; Google and CalDAV calendars in the agenda, from rjd-gcal and
@@ -745,15 +751,18 @@ buffer, is left out, as it was before this existed."
                  (string-prefix-p "[[mu4e:msgid:" annotation))
         (concat "\n  " annotation))))
   :custom
+  ;; `i' and `N' capture into inbox.org where org-sync's list names it,
+  ;; and otherwise into cetos-inbox.org; where it names both, `w'
+  ;; captures into cetos-inbox.org.  See `org-agenda-files' above.
   (org-capture-templates
-   '(("n" "New note (with Denote)" plain
+   `(("n" "New note (with Denote)" plain
       (file denote-last-path)
       #'denote-org-capture :jump-to-captured t :kill-buffer t :no-save t :immediate-finish nil)
      ("i" "Inbox" entry
-      (file "~/org-agenda/inbox.org")
+      (file ,(rjd/org-files-capture-inbox))
       "* TODO %?\n  %U" :prepend nil :empty-lines 1)
      ("N" "Note" entry
-      (file "~/org-agenda/inbox.org")
+      (file ,(rjd/org-files-capture-inbox))
       "* %?\n  %U" :prepend nil :empty-lines 1)
      ;; `org-web-tools--url-as-readable-org' is private.  A rename upstream
      ;; takes this template out with a void-function error at capture time,
@@ -769,7 +778,13 @@ buffer, is left out, as it was before this existed."
      ("c" "Cetos task" entry
       (file+headline "~/org-agenda/projects.org" "Cetos")
       "* TODO %?\n  %U%(rjd/org-capture-mail-link)" :prepend nil :empty-lines 1)
-     )))
+     ;; Only where both inboxes are synced: elsewhere `i' already goes to
+     ;; the one there is.  Like `i', but linking back to a mail message
+     ;; as `c' does.
+     ,@(when-let* ((cetos-inbox (rjd/org-files-cetos-inbox)))
+         `(("w" "Cetos inbox" entry
+            (file ,cetos-inbox)
+            "* TODO %?\n  %U%(rjd/org-capture-mail-link)" :prepend nil :empty-lines 1))))))
 
 ;; Settings for `org-icalendar-combine-agenda-files', which writes the
 ;; combined .ics that the calendar subscribes to.  Nothing in this file

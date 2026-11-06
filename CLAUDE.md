@@ -208,6 +208,22 @@ form.  ERT tests: `test/rjd-mail-contacts-test.el`.
 
 ## Calendar
 
+The agenda's own org files are the ones the host syncs: `rjd-org-files`
+(user-lisp) reads org-sync's list, `~/.config/org-sync/files`, which
+the `setup` repo writes -- one name per line, each a file in
+`~/org-agenda/`, blank lines and `#` comments ignored.  Without the
+list they are the personal four, `inbox.org`, `projects.org`,
+`areas.org` and `someday.org`.  `org-agenda-files` is the listed files,
+in order, then the calendar directory; the Dashboard's "Inbox (process
+me)" view reads every listed inbox, `inbox.org` and `cetos-inbox.org`;
+capture's `i` and `N` go to `inbox.org` where it is listed and
+otherwise to `cetos-inbox.org`; and where both are listed, `w`
+captures into `cetos-inbox.org`.  The list is read once, as org,
+org-agenda and org-capture load, so a changed list takes effect at the
+next start.  Refiling offers every agenda file.  The smoke test points
+the list at a file that never exists, so it always sees the personal
+four.  ERT tests: `test/rjd-org-files-test.el`.
+
 Every external calendar is fetched, read-only, into its own calendar
 file in `rjd/calendar-directory`, `~/org-agenda/calendars/`.
 `org-agenda-files` lists the directory, so the agenda reads every file
