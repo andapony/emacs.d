@@ -855,8 +855,7 @@ copies."
 (use-package rjd-gcal
   :defer t
   :custom
-  (rjd/gcal-file (file-name-concat rjd/calendar-directory
-                                   "gcal-gmail-personal.org")))
+  (rjd/gcal-file (file-name-concat rjd/calendar-directory "gcal.org")))
 
 ;; CalDAV calendars, iCloud's and Fastmail's, read-only, in the agenda:
 ;; rjd-caldav, a local package in user-lisp/, fetches each over CalDAV

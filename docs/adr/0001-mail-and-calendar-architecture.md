@@ -120,10 +120,9 @@ production" and left unverified, under Google's personal-use exemption.
 The spec planned Thunderbird's public client ID, but Google blocks that
 ID outright ("This app is blocked") when it asks for `calendar.readonly`:
 it is approved only for the scopes Thunderbird itself requests, which
-include full calendar but not read-only.  The Cetos client is **open**
-until Cetos IT answers: either an Internal app in a Cetos-owned Cloud
-project, or Thunderbird's ID if it is allowlisted -- which would carry
-mail only, leaving the calendar to the plstore fallback below.
+include full calendar but not read-only.  The Cetos client was left
+open here; it turned out to be the personal one (see the last
+addendum).
 
 
 ## Consequences
@@ -176,10 +175,10 @@ configuration.  This repository holds the code and this record.
   password command in the mbsync and msmtp configs; used if oama stops
   working.
 - **A Cetos-owned Internal OAuth app versus Thunderbird's client ID**
-  (open for Cetos).  An Internal app in a Cetos Cloud project needs IT
-  to allow creating one; Thunderbird's ID needs IT to allowlist it, and
-  cannot carry `calendar.readonly` in any case.  Decided when Cetos IT
-  answers.
+  (not needed for Cetos; see the last addendum).  An Internal app in a
+  Cetos Cloud project needs IT to allow creating one; Thunderbird's ID
+  needs IT to allowlist it, and cannot carry `calendar.readonly` in any
+  case.  Both stay the fallbacks if Cetos blocks the personal client.
 - **Thunderbird's client ID for the personal account** (rejected).
   Blocked for `calendar.readonly`, as above.  Asking it for full
   `calendar` instead would pass, but the token could then write to the
@@ -229,3 +228,27 @@ the container would hold no password.  Rejected because it splits
 syncing across two places: two mbsyncs, two configurations, and two
 command prefixes for `rjd/mail-command` to choose between per account,
 where today one prefix reaches every mail tool.
+
+
+## Addendum: Cetos replaces the trial account
+
+Issues: [#14](https://github.com/andapony/emacs.d/issues/14),
+[#15](https://github.com/andapony/emacs.d/issues/15),
+[#16](https://github.com/andapony/emacs.d/issues/16).
+
+**The Cetos client is the personal one.**  Cetos's Workspace admin
+policy let the personal "Desktop app" client in: login showed the same
+"Google hasn't verified this app" warning and granted both scopes, and
+IMAP and SMTP accept its XOAUTH2 token.  So neither an Internal app in
+a Cetos Cloud project nor Thunderbird's ID was needed, and Cetos IT was
+not asked.  The Cetos account took the trial account's place outright
+-- declaration, mbsync, msmtp, the calendar -- with no code change, as
+the Context intended.
+
+**The trial account stays.**  It owns the Cloud project the client
+lives in, so deleting that Google account or project would stop Cetos
+mail and calendar.  Only its mail, its token and its own grant to the
+client were removed.  And Cetos's admins can withdraw the access at
+any time, by blocking unconfigured third-party apps; the fallbacks
+above -- an Internal app, or Thunderbird's ID for mail only -- are what
+to ask IT for then.

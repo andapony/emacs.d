@@ -514,7 +514,7 @@ not loaded before then."
   (require 'org-agenda)
   (should rjd/gcal-mode)
   (should (equal rjd/gcal-file
-                 "~/org-agenda/calendars/gcal-gmail-personal.org"))
+                 "~/org-agenda/calendars/gcal.org"))
   (should (string-prefix-p (expand-file-name rjd/calendar-directory)
                            (expand-file-name rjd/gcal-file))))
 

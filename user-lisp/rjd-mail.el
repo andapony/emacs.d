@@ -113,6 +113,14 @@
 ;; `mu4e-query-rewrite-function' with `rjd/mail-search-query', unless
 ;; a search names them.
 ;;
+;; A message trashed from a Gmail Inbox comes back until the next sync.
+;; Only the Inbox copy moves to Trash; the All Mail copy stays, and
+;; with duplicates hidden it is listed in the Inbox copy's place.
+;; mbsync uploads the move, Gmail matches the upload to the message
+;; and takes it out of All Mail, but mbsync syncs All Mail before Trash
+;; and so sees that only on its next run, when it deletes the local All
+;; Mail copy.  Nothing is lost; it just takes two syncs to settle.
+;;
 ;; Replies to calendar invitations need one fix to gnus-icalendar,
 ;; which mu4e-icalendar builds them with.  Emacs 31's
 ;; `gnus-icalendar-event--build-reply' -- a private function -- copies

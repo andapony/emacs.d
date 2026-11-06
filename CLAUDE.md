@@ -217,7 +217,7 @@ org-sync, whose file set is the `setup` repo's, never names these files.
 
 Google Calendar reaches the agenda through `rjd-gcal` (user-lisp), which
 has org-gcal fetch one account's calendar into
-`~/org-agenda/calendars/gcal-gmail-personal.org`.  The account is set in
+`~/org-agenda/calendars/gcal.org`.  The account is set in
 `private.el` as `rjd/gcal-account`; without it, or where mail cannot
 run (see Mail), nothing is fetched and there is no timer.  The
 token comes from oama, through `rjd/mail-command`, by `:around` advice
