@@ -9,7 +9,7 @@
 		 exec-path-from-shell flycheck flycheck-golangci-lint
 		 flycheck-hledger gptel jinx ledger-mode magit
 		 marginalia mermaid-mode ob-mermaid orderless
-		 org-chronicle org-gcal org-modern org-reading-list
+		 org-gcal org-modern org-reading-list
 		 org-web-tools ox-gfm ripgrep spacious-padding vertico
 		 yasnippet)))
 

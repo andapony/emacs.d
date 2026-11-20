@@ -1398,15 +1398,6 @@ navigating by Go declarations."
                                   org-reading-list-goto-headline)
                    "%(org-reading-list-capture)" :empty-lines 1))))
 
-(use-package org-chronicle
-  :after org
-  :demand t
-  :custom
-  (org-chronicle-lane-column-width 24)
-  :config
-  ;; Globalized mode; only actually turns on in org files under
-  ;; `org-chronicle-root'.
-  (org-chronicle-global-entity-links-mode 1))
 
 ;;; Spelling
 
