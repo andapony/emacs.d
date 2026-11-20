@@ -7,6 +7,17 @@
 
 ;;; Code:
 
+;; The bundled libgccjit guesses macOS 18.0 from Darwin 27, which clang rejects.
+;; Pass the real version so native compilation works.  Ask the system
+;; rather than pinning one: a pin newer than an older Mac's macOS links
+;; every .eln for an OS that dyld then refuses to load them on.  Keep
+;; "-Wl,-w", Emacs's own Darwin default, which this replaces.
+(when (eq system-type 'darwin)
+  (setq native-comp-driver-options
+        (list "-Wl,-w"
+              (concat "-mmacosx-version-min="
+                      (car (process-lines "sw_vers" "-productVersion"))))))
+
 ;; Log native compilation warnings from packages without popping up the
 ;; *Warnings* buffer.  Visit that buffer manually if you need to review them.
 ;;
