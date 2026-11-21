@@ -1585,6 +1585,26 @@ the main view should not usually stop it."
          ("C-c +" . rjd/mail-contacts-add-sender))
   :init
   (add-hook 'emacs-startup-hook #'rjd/mail-start-syncing)
+  ;; A compose buffer visits its draft in the drafts maildir's cur/, and
+  ;; Emacs writes a buffer's auto-save file, #NAME#, and backup, NAME~,
+  ;; beside the file it visits.  mbsync takes any file in cur/ for a
+  ;; message: it uploaded an auto-save of a draft never saved, renamed
+  ;; it with a UID so Emacs lost track of it, and the abandoned draft
+  ;; stayed in Gmail's Drafts after its buffer was quit.  So both go
+  ;; to a private directory instead, for any file named as a maildir
+  ;; message.  `recover-file' on a draft still finds its auto-save,
+  ;; since it applies the same transform.  The directory is outside
+  ;; ~/projects, so no agent container can read the drafts in it, and
+  ;; is made now, since Emacs never creates an auto-save directory.
+  (require 'xdg)
+  (let ((dir (file-name-as-directory
+              (file-name-concat (xdg-state-home) "emacs" "mail-auto-save")))
+        ;; The whole name, since a transform replaces only what it
+        ;; matches.  ":2," begins a maildir message's flags.
+        (message-file "\\`.*/\\(?:cur\\|new\\)/[^/]*:2,[^/]*\\'"))
+    (with-file-modes #o700 (make-directory dir t))
+    (add-to-list 'auto-save-file-name-transforms (list message-file dir t))
+    (add-to-list 'backup-directory-alist (cons message-file dir)))
   ;; All mail is written in mu4e: `compose-mail' -- C-x m, a mailto:
   ;; link, a bug report -- opens mu4e's compose, so it asks which account
   ;; to send as and files the sent copy, which Fastmail does not.  mu4e

@@ -142,7 +142,11 @@ message's context only for a context's `vars`, which `rjd-mail` does
 not use, so each `mu4e-trash-folder` and `mu4e-refile-folder` is a
 function of the message.
 It is opt-in, enabled from mu4e's form in `init.el`, which also starts
-mu4e in the background at startup so mail syncs unopened.
+mu4e in the background at startup so mail syncs unopened.  That form
+also sends the auto-save and backup files of any file named as a
+maildir message to `$XDG_STATE_HOME/emacs/mail-auto-save/`: mbsync
+uploads anything in `cur/`, so a draft's `#NAME#` left beside it
+became a Gmail draft nobody saved.
 
 An account's aliases (Fastmail's plus, subdomain and catch-all
 addresses) are one regexp, its optional `:addresses`, set in

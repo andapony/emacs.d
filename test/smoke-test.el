@@ -339,6 +339,29 @@ never runs `emacs-startup-hook'."
   (should (memq #'rjd/mail-start-syncing emacs-startup-hook))
   (should (fboundp 'rjd/mail-start-syncing)))
 
+(ert-deftest rjd/smoke-mail-drafts-save-outside-the-maildir ()
+  "A draft's auto-save and backup files are kept out of its maildir.
+mbsync uploads any file in cur/ as a message.  Other files' are
+left beside them.  Checked without mu4e, whose form sets this up
+before it loads."
+  (let* ((maildir "/home/u/Mail/acct/drafts/cur/")
+         (draft (concat maildir "1795214004.69fca90cbf3d83e8.azoth:2,DS"))
+         (state (expand-file-name "emacs/mail-auto-save/"
+                                  (or (getenv "XDG_STATE_HOME")
+                                      "~/.local/state"))))
+    (with-temp-buffer
+      (setq buffer-file-name draft)
+      (let ((auto-save (make-auto-save-file-name)))
+        (should (string-prefix-p state auto-save))
+        (should-not (string-prefix-p "/home/u/Mail/" auto-save))))
+    (should (string-prefix-p state (make-backup-file-name draft)))
+    (should (file-directory-p state))
+    (should (= (file-modes state) #o700))
+    (with-temp-buffer
+      (setq buffer-file-name "/home/u/notes/cur/plain.txt")
+      (should (equal (make-auto-save-file-name)
+                     "/home/u/notes/cur/#plain.txt#")))))
+
 (ert-deftest rjd/smoke-mail-is-written-in-mu4e ()
   "C-x m opens mu4e's compose, whose agent is defined before mu4e loads.
 Checked against the features init.el alone loaded, since other tests
