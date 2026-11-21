@@ -776,7 +776,8 @@ buffer, is left out, as it was before this existed."
   :custom
   ;; `i' and `N' capture into inbox.org where org-sync's list names it,
   ;; and otherwise into cetos-inbox.org; where it names both, `w'
-  ;; captures into cetos-inbox.org.  See `org-agenda-files' above.
+  ;; captures into cetos-inbox.org.  `c' captures into cetos-projects.org
+  ;; where the list names it.  See `org-agenda-files' above.
   (org-capture-templates
    `(("n" "New note (with Denote)" plain
       (file denote-last-path)
@@ -795,12 +796,13 @@ buffer, is left out, as it was before this existed."
       (file+olp+datetree
        ,(file-name-concat rjd/sync-directory "org-more/alphapapa-links.org"))
       "%(org-web-tools--url-as-readable-org)" :empty-lines 1)
-     ;; org-capture creates the "Cetos" heading at the end of the file if it
-     ;; is missing, so this needs no setup in projects.org.  Captured from a
-     ;; mu4e message, the task links back to it; from anywhere else, the
-     ;; link line is absent rather than empty.
+     ;; Into cetos-projects.org, at its top level, where org-sync's list
+     ;; names it; otherwise under "Cetos" in projects.org, a heading
+     ;; org-capture creates at the end of the file if it is missing.
+     ;; Captured from a mu4e message, the task links back to it; from
+     ;; anywhere else, the link line is absent rather than empty.
      ("c" "Cetos task" entry
-      (file+headline "~/org-agenda/projects.org" "Cetos")
+      ,(rjd/org-files-cetos-task-target)
       "* TODO %?\n  %U%(rjd/org-capture-mail-link)" :prepend nil :empty-lines 1)
      ;; Only where both inboxes are synced: elsewhere `i' already goes to
      ;; the one there is.  Like `i', but linking back to a mail message

@@ -17,7 +17,8 @@
 ;; Two of the names are inboxes, `inbox.org' and `cetos-inbox.org'.
 ;; Capture goes to the personal one where it is listed and to the Cetos
 ;; one where only that is, and where both are, init.el adds a template
-;; for the Cetos one too.
+;; for the Cetos one too.  A Cetos task goes to `cetos-projects.org'
+;; where it is listed, and otherwise under "Cetos" in `projects.org'.
 ;;
 ;; Nothing here caches: each function reads the list afresh.  init.el
 ;; calls them once, as org, org-agenda and org-capture load, so a
@@ -110,6 +111,16 @@ Only then is it not where `rjd/org-files-capture-inbox' already goes,
 and so in need of a capture template of its own."
   (let ((inboxes (rjd/org-files-inboxes)))
     (and (cdr inboxes) (cadr inboxes))))
+
+;;;###autoload
+(defun rjd/org-files-cetos-task-target ()
+  "Where a Cetos task is captured, as an `org-capture-templates' target.
+The top level of `cetos-projects.org' where the list names it, so the
+work machine and one syncing every file both file Cetos tasks there;
+otherwise the \"Cetos\" heading in `projects.org', as without a list."
+  (if (member "cetos-projects.org" (rjd/org-files-names))
+      (list 'file (rjd/org-files--path "cetos-projects.org"))
+    (list 'file+headline (rjd/org-files--path "projects.org") "Cetos")))
 
 (provide 'rjd-org-files)
 ;;; rjd-org-files.el ends here

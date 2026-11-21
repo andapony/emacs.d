@@ -262,7 +262,9 @@ in order, then the calendar directory; the Dashboard's "Inbox (process
 me)" view reads every listed inbox, `inbox.org` and `cetos-inbox.org`;
 capture's `i` and `N` go to `inbox.org` where it is listed and
 otherwise to `cetos-inbox.org`; and where both are listed, `w`
-captures into `cetos-inbox.org`.  The list is read once, as org,
+captures into `cetos-inbox.org`.  Capture's `c`, a Cetos task, goes
+to `cetos-projects.org` where it is listed, and otherwise under "Cetos"
+in `projects.org`.  The list is read once, as org,
 org-agenda and org-capture load, so a changed list takes effect at the
 next start.  Refiling offers every agenda file.  The smoke test points
 the list at a file that never exists, so it always sees the personal
