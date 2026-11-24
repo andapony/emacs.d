@@ -153,30 +153,4 @@ name is not part of it."
     (should (equal (rjd/org-files-capture-inbox) "~/org-agenda/inbox.org"))
     (should-not (rjd/org-files-cetos-inbox))))
 
-;;; The Cetos task
-
-(ert-deftest rjd/org-files-cetos-task-all-eight ()
-  "With every file listed, a Cetos task goes to cetos-projects.org."
-  (rjd/org-files-test-with-list rjd/org-files-test-all
-    (should (equal (rjd/org-files-cetos-task-target)
-                   '(file "~/org-agenda/cetos-projects.org")))))
-
-(ert-deftest rjd/org-files-cetos-task-cetos-only ()
-  "With only the Cetos four listed, a Cetos task goes to cetos-projects.org."
-  (rjd/org-files-test-with-list rjd/org-files-test-cetos
-    (should (equal (rjd/org-files-cetos-task-target)
-                   '(file "~/org-agenda/cetos-projects.org")))))
-
-(ert-deftest rjd/org-files-cetos-task-personal-four ()
-  "With the personal four listed, a Cetos task goes under Cetos in projects.org."
-  (rjd/org-files-test-with-list rjd/org-files-test-personal
-    (should (equal (rjd/org-files-cetos-task-target)
-                   '(file+headline "~/org-agenda/projects.org" "Cetos")))))
-
-(ert-deftest rjd/org-files-cetos-task-no-list ()
-  "Without a list, a Cetos task goes under Cetos in projects.org."
-  (rjd/org-files-test-with-list nil
-    (should (equal (rjd/org-files-cetos-task-target)
-                   '(file+headline "~/org-agenda/projects.org" "Cetos")))))
-
 ;;; rjd-org-files-test.el ends here

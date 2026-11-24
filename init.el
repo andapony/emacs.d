@@ -775,19 +775,20 @@ buffer, is left out, as it was before this existed."
         (concat "\n  " annotation))))
   :custom
   ;; `i' and `N' capture into inbox.org where org-sync's list names it,
-  ;; and otherwise into cetos-inbox.org; where it names both, `w'
-  ;; captures into cetos-inbox.org.  `c' captures into cetos-projects.org
-  ;; where the list names it.  See `org-agenda-files' above.
+  ;; and otherwise into cetos-inbox.org; where it names both, `c'
+  ;; captures into cetos-inbox.org.  See `org-agenda-files' above.
+  ;; Captured from a mu4e message, an inbox entry links back to it; from
+  ;; anywhere else, the link line is absent rather than empty.
   (org-capture-templates
    `(("n" "New note (with Denote)" plain
       (file denote-last-path)
       #'denote-org-capture :jump-to-captured t :kill-buffer t :no-save t :immediate-finish nil)
      ("i" "Inbox" entry
       (file ,(rjd/org-files-capture-inbox))
-      "* TODO %?\n  %U" :prepend nil :empty-lines 1)
+      "* TODO %?\n  %U%(rjd/org-capture-mail-link)" :prepend nil :empty-lines 1)
      ("N" "Note" entry
       (file ,(rjd/org-files-capture-inbox))
-      "* %?\n  %U" :prepend nil :empty-lines 1)
+      "* %?\n  %U%(rjd/org-capture-mail-link)" :prepend nil :empty-lines 1)
      ;; `org-web-tools--url-as-readable-org' is private.  A rename upstream
      ;; takes this template out with a void-function error at capture time,
      ;; not at load, so it will look like a capture problem rather than a
@@ -796,19 +797,11 @@ buffer, is left out, as it was before this existed."
       (file+olp+datetree
        ,(file-name-concat rjd/sync-directory "org-more/alphapapa-links.org"))
       "%(org-web-tools--url-as-readable-org)" :empty-lines 1)
-     ;; Into cetos-projects.org, at its top level, where org-sync's list
-     ;; names it; otherwise under "Cetos" in projects.org, a heading
-     ;; org-capture creates at the end of the file if it is missing.
-     ;; Captured from a mu4e message, the task links back to it; from
-     ;; anywhere else, the link line is absent rather than empty.
-     ("c" "Cetos task" entry
-      ,(rjd/org-files-cetos-task-target)
-      "* TODO %?\n  %U%(rjd/org-capture-mail-link)" :prepend nil :empty-lines 1)
      ;; Only where both inboxes are synced: elsewhere `i' already goes to
-     ;; the one there is.  Like `i', but linking back to a mail message
-     ;; as `c' does.
+     ;; the one there is.  Cetos work is captured here and refiled from
+     ;; it, like anything else in an inbox.
      ,@(when-let* ((cetos-inbox (rjd/org-files-cetos-inbox)))
-         `(("w" "Cetos inbox" entry
+         `(("c" "Cetos inbox" entry
             (file ,cetos-inbox)
             "* TODO %?\n  %U%(rjd/org-capture-mail-link)" :prepend nil :empty-lines 1))))))
 

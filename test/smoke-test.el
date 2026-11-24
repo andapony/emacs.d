@@ -469,21 +469,34 @@ it."
 
 ;;; Capture
 
-(defun rjd/smoke-capture-cetos (from &optional mail-link)
-  "Capture an empty Cetos task as if from buffer FROM, and return it.
-The task is the text the capture adds to its target, as a string.
+(defun rjd/smoke-capture-templates-with-both-inboxes ()
+  "init.el's capture templates as a machine syncing both inboxes gets them.
+The smoke test's org-sync list never exists, so `c' is otherwise
+absent; this evaluates the `:custom' expression again under a list
+naming inbox.org and cetos-inbox.org."
+  (let ((list (make-temp-file "rjd-smoke-org-sync" nil nil
+                              "inbox.org\ncetos-inbox.org\n")))
+    (unwind-protect
+        (let ((rjd/org-files-list-file list))
+          (rjd/smoke-custom-value 'org-capture-templates))
+      (delete-file list))))
+
+(defun rjd/smoke-capture (key from &optional mail-link)
+  "Capture an empty entry with template KEY as if from buffer FROM.
+Return the text the capture adds to its target, as a string.
+KEY is one of init.el's inbox templates, `i', `N' or `c', as a
+machine syncing both inboxes has them, aimed at a temporary file.
 With MAIL-LINK, an org link to a message, capture as if from that
 message in mu4e: the link is handed to `org-capture' already stored,
 as it would be by mu4e-org, which is how org-protocol and the like
 pass a link in too.  Without it, capture stores a link to FROM as
-usual.  The template is init.el's \"c\" one, aimed at a temporary
-file, and the capture is dated 2026-10-10 09:30."
-  (let* ((target (make-temp-file "rjd-smoke-cetos" nil ".org"))
-         (cetos (assoc "c" org-capture-templates))
+usual.  The capture is dated 2026-10-10 09:30."
+  (let* ((target (make-temp-file "rjd-smoke-capture" nil ".org"))
+         (template (assoc key (rjd/smoke-capture-templates-with-both-inboxes)))
          (org-capture-templates
-          (list (append (seq-take cetos 3)
-                        (list (list 'file+headline target "Cetos"))
-                        (seq-drop cetos 4))))
+          (list (append (seq-take template 3)
+                        (list (list 'file target))
+                        (seq-drop template 4))))
          (org-overriding-default-time
           (encode-time '(0 30 9 10 10 2026 nil -1 nil)))
          (org-capture-link-is-already-stored (and mail-link t))
@@ -492,7 +505,7 @@ file, and the capture is dated 2026-10-10 09:30."
                                           :annotation mail-link))))
     (unwind-protect
         (with-current-buffer from
-          (org-capture nil "c")
+          (org-capture nil key)
           (org-capture-finalize)
           (with-current-buffer (find-buffer-visiting target)
             (prog1 (buffer-substring-no-properties (point-min) (point-max))
@@ -500,45 +513,54 @@ file, and the capture is dated 2026-10-10 09:30."
               (kill-buffer))))
       (delete-file target))))
 
-(ert-deftest rjd/smoke-cetos-capture-keeps-its-key-and-target ()
-  "The Cetos template is still `c', filed under Cetos in projects.org."
-  (require 'org-capture)
-  (let ((cetos (assoc "c" org-capture-templates)))
-    (should (equal (seq-take cetos 4)
-                   '("c" "Cetos task" entry
-                     (file+headline "~/org-agenda/projects.org" "Cetos"))))
-    (should (equal (seq-drop cetos 5) '(:prepend nil :empty-lines 1)))))
+(defconst rjd/smoke-capture-headlines
+  '(("i" . "* TODO ") ("N" . "* ") ("c" . "* TODO "))
+  "Each inbox template's key, and the headline it captures empty.")
 
 (ert-deftest rjd/smoke-inbox-capture-goes-to-inbox-org ()
-  "Without org-sync's list, `i' and `N' capture into inbox.org, and no `w'."
+  "Without org-sync's list, `i' and `N' capture into inbox.org, and no `c'."
   (require 'org-capture)
   (dolist (key '("i" "N"))
     (should (equal (nth 3 (assoc key org-capture-templates))
                    '(file "~/org-agenda/inbox.org"))))
-  (should-not (assoc "w" org-capture-templates)))
+  (should-not (assoc "c" org-capture-templates)))
 
-(ert-deftest rjd/smoke-cetos-capture-from-elsewhere-is-unchanged ()
-  "Captured from a file, a Cetos task is just the TODO and its date.
-The link org stores to the file is left out, as it always was."
+(ert-deftest rjd/smoke-cetos-inbox-capture-with-both-inboxes ()
+  "Where both inboxes are listed, `c' captures into cetos-inbox.org."
+  (require 'org-capture)
+  (let ((cetos (assoc "c" (rjd/smoke-capture-templates-with-both-inboxes))))
+    (should (equal (seq-take cetos 4)
+                   '("c" "Cetos inbox" entry
+                     (file "~/org-agenda/cetos-inbox.org"))))
+    (should (equal (seq-drop cetos 5) '(:prepend nil :empty-lines 1)))))
+
+(ert-deftest rjd/smoke-inbox-capture-from-elsewhere-has-no-link ()
+  "Captured from a file, an inbox entry is just the headline and its date.
+The link org stores to the file is left out."
   (require 'org-capture)
   (let ((file (make-temp-file "rjd-smoke-notes" nil ".txt" "Some notes\n")))
     (unwind-protect
         (let ((buffer (find-file-noselect file)))
           (unwind-protect
-              (should (equal (rjd/smoke-capture-cetos buffer)
-                             "* Cetos\n\n** TODO \n  [2026-10-10 Sat 09:30]\n\n"))
+              (pcase-dolist (`(,key . ,headline) rjd/smoke-capture-headlines)
+                (should (equal (list key (rjd/smoke-capture key buffer))
+                               (list key (concat "\n" headline
+                                                 "\n  [2026-10-10 Sat 09:30]\n\n")))))
             (kill-buffer buffer)))
       (delete-file file))))
 
-(ert-deftest rjd/smoke-cetos-capture-from-a-message-links-to-it ()
-  "Captured from a mu4e message, a Cetos task links back to it."
+(ert-deftest rjd/smoke-inbox-capture-from-a-message-links-to-it ()
+  "Captured from a mu4e message, an inbox entry links back to it."
   (require 'org-capture)
   (with-temp-buffer
-    (should (equal (rjd/smoke-capture-cetos
-                    (current-buffer)
-                    "[[mu4e:msgid:rjd9@test.invalid][Budget for Q4]]")
-                   (concat "* Cetos\n\n** TODO \n  [2026-10-10 Sat 09:30]\n"
-                           "  [[mu4e:msgid:rjd9@test.invalid][Budget for Q4]]\n\n")))))
+    (pcase-dolist (`(,key . ,headline) rjd/smoke-capture-headlines)
+      (should (equal (list key
+                           (rjd/smoke-capture
+                            key (current-buffer)
+                            "[[mu4e:msgid:rjd9@test.invalid][Budget for Q4]]"))
+                     (list key
+                           (concat "\n" headline "\n  [2026-10-10 Sat 09:30]\n"
+                                   "  [[mu4e:msgid:rjd9@test.invalid][Budget for Q4]]\n\n")))))))
 
 (ert-deftest rjd/smoke-calendar-directory-is-made-beside-the-agenda ()
   "The calendar directory is made where the agenda's directory exists.
