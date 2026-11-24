@@ -185,5 +185,46 @@ directories are compared by theirs."
     (should (equal (rjd/container-test-prefix "elsewhere/repo")
                    '("docker" "exec" "-i" "other")))))
 
+;;; The agent-shell check
+
+(defun rjd/container-test-check (dir)
+  "Run the agent-shell check in a buffer in DIR, relative to HOME.
+Return nil when it passes, or the `user-error' message."
+  (with-temp-buffer
+    (setq default-directory
+          (file-name-as-directory (expand-file-name dir (getenv "HOME"))))
+    (condition-case err
+        (progn (rjd/container-check-agent-shell :ignored 'arguments) nil)
+      (user-error (error-message-string err)))))
+
+(ert-deftest rjd/container-check-passes-an-owned-directory ()
+  "A directory with a container passes, whatever the fallback."
+  (rjd/container-test-with-home "~/client claude-client\n"
+    (should-not (rjd/container-test-check "client/repo"))))
+
+(ert-deftest rjd/container-check-passes-where-the-fallback-exists ()
+  "An unowned directory passes where claude-dev is there to fall back to:
+with no map, whose default names it, or a map that lists it."
+  (rjd/container-test-with-home nil
+    (should-not (rjd/container-test-check "elsewhere/repo")))
+  (rjd/container-test-with-home rjd/container-test-map
+    (should-not (rjd/container-test-check "elsewhere/repo"))))
+
+(ert-deftest rjd/container-check-refuses-without-the-fallback ()
+  "An unowned directory fails where the map leaves claude-dev out.
+The message names the directory, the map and the missing fallback."
+  (rjd/container-test-with-home "~/client claude-client\n"
+    (let ((message (rjd/container-test-check "projects/repo")))
+      (should message)
+      (should (string-match-p "projects/repo" message))
+      (should (string-match-p "containers" message))
+      (should (string-match-p "claude-dev" message)))))
+
+(ert-deftest rjd/container-check-passes-with-claude-container ()
+  "CLAUDE_CONTAINER gives every shell a container, so nothing fails."
+  (rjd/container-test-with-home "~/client claude-client\n"
+    (setenv "CLAUDE_CONTAINER" "other")
+    (should-not (rjd/container-test-check "projects/repo"))))
+
 (provide 'rjd-container-test)
 ;;; rjd-container-test.el ends here

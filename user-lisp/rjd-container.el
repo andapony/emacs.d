@@ -27,6 +27,15 @@
 ;; The file is read afresh at every call: it is a few lines, read when
 ;; a shell starts or a commit message is finished, so an edit to it
 ;; takes effect at once.
+;;
+;; agent-shell starts a shell in a directory no entry owns in
+;; `rjd/container-default', claude-dev.  A machine whose map leaves
+;; claude-dev out -- a work machine, with only claude-cetos -- has no
+;; such container, and the failed `docker exec' reached the user only
+;; as a JSON-RPC -32603.  `rjd/container-check-agent-shell' says what
+;; is wrong instead, before the shell's agent is started.  It is kept
+;; out of the prefix function, which the header's version and budget
+;; also call while redisplaying, where an error has nowhere to go.
 
 ;;; Code:
 
@@ -90,6 +99,26 @@ which no local container can see, has none."
                    (> (length (car entry)) (length (car best))))
           (setq best entry)))
       (and best (or (rjd/container--override) (cdr best))))))
+
+;;;###autoload
+(defun rjd/container-check-agent-shell (&rest _)
+  "Signal a `user-error' if the current buffer's shell has no container.
+For `:before' advice on the function agent-shell starts its agent
+with, which it calls in the shell's buffer: arguments are ignored.
+The shell has a container when one owns its `default-directory', when
+CLAUDE_CONTAINER is set, or when `rjd/container-default' is in the
+map -- or there is no map, whose default names it -- so it is there
+to fall back to.  Otherwise `rjd/container-agent-shell-prefix' would
+name a container this machine never runs."
+  (let ((dir default-directory))
+    (unless (or (rjd/container-for-directory dir)
+                (rjd/container--override)
+                (rassoc rjd/container-default (rjd/container-map)))
+      (user-error "No agent container owns %s: the container map (%s) \
+lists no directory containing it, and no %s to fall back to"
+                  (abbreviate-file-name dir)
+                  (abbreviate-file-name rjd/container-map-file)
+                  rjd/container-default))))
 
 ;;;###autoload
 (defun rjd/container-agent-shell-prefix (buffer)

@@ -1926,6 +1926,14 @@ whatever another machine has synced in since."
   ;; Code, i.e. rebuilding the container would now get you something.
   (rjd/agent-shell-version-mode 1)
 
+  ;; A shell in a directory no container owns, on a machine without
+  ;; claude-dev to fall back to, says so before its agent starts, rather
+  ;; than failing as a JSON-RPC -32603.  Advice on a private function:
+  ;; renamed upstream, the advice just never runs, and the error goes
+  ;; back to the opaque one.
+  (advice-add 'agent-shell--make-acp-client :before
+              #'rjd/container-check-agent-shell)
+
   (add-hook 'agent-shell-mode-hook #'rjd/agent-shell-drop-comint-completion)
   (add-hook 'agent-shell-mode-hook #'rjd/agent-shell-static-completions)
   (add-hook 'agent-shell-mode-hook #'rjd/agent-shell-short-mode-line)

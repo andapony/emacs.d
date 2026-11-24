@@ -83,7 +83,12 @@ buffer's `default-directory`: `DIRECTORY CONTAINER` lines, `~` for
 `$HOME`, blank lines and `#` comments ignored, the longest containing
 directory winning.  Where the map names none, or there is no map, it is
 `claude-dev`, so a machine without the file behaves as before;
-`$CLAUDE_CONTAINER` overrides both.  The map is written by the `setup`
+`$CLAUDE_CONTAINER` overrides both.  Where the map names none and
+leaves `claude-dev` out too -- a work machine's, with only
+`claude-cetos` -- `rjd/container-check-agent-shell`, advice on
+agent-shell's client constructor, stops the shell with a message
+naming the directory, instead of a `docker exec` failure that arrives
+as a JSON-RPC -32603.  The map is written by the `setup`
 playbook, outside `~/projects`, since an agent that could edit it could
 send host git for its repos to the host.  Each container mounts its
 directory at the same path inside and out, so path translation is the
