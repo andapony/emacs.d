@@ -19,6 +19,12 @@
 ;; one where only that is, and where both are, init.el adds a template
 ;; for the Cetos one too.
 ;;
+;; Two more are the someday files, `someday.org' and
+;; `cetos-someday.org', whose entries are ideas, not commitments.  The
+;; agenda leaves them out, so none of them appears in any agenda view,
+;; and refiling is offered them separately: init.el lists them in
+;; `org-refile-targets' beside `org-agenda-files'.
+;;
 ;; Nothing here caches: each function reads the list afresh.  init.el
 ;; calls them once, as org, org-agenda and org-capture load, so a
 ;; change to the list takes effect at the next start.  Its tests are in
@@ -55,6 +61,9 @@ Written by the setup repo's org-sync role.  Without it the names are
 (defconst rjd/org-files-inbox-names '("inbox.org" "cetos-inbox.org")
   "The names of the inboxes, the personal one first.")
 
+(defconst rjd/org-files-someday-names '("someday.org" "cetos-someday.org")
+  "The names of the someday files, kept out of the agenda but refiled to.")
+
 
 ;;; The list
 
@@ -80,9 +89,19 @@ comments, or any name with a `/'; or, without that file,
 
 ;;;###autoload
 (defun rjd/org-files-agenda-files ()
-  "The org files in use, each in `rjd/org-files-directory'.
-For `org-agenda-files', in the list's order."
-  (mapcar #'rjd/org-files--path (rjd/org-files-names)))
+  "The org files in use but the someday files, each in `rjd/org-files-directory'.
+For `org-agenda-files', in the list's order.  The someday files are
+`rjd/org-files-someday-files'."
+  (mapcar #'rjd/org-files--path
+          (seq-difference (rjd/org-files-names) rjd/org-files-someday-names)))
+
+;;;###autoload
+(defun rjd/org-files-someday-files ()
+  "The someday files in use, each in `rjd/org-files-directory'.
+Left out of `org-agenda-files', for `org-refile-targets' to offer
+alongside it, in the list's order."
+  (mapcar #'rjd/org-files--path
+          (seq-intersection (rjd/org-files-names) rjd/org-files-someday-names)))
 
 ;;;###autoload
 (defun rjd/org-files-inboxes ()

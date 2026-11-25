@@ -263,13 +263,16 @@ the `setup` repo writes -- one name per line, each a file in
 `~/org-agenda/`, blank lines and `#` comments ignored.  Without the
 list they are the personal four, `inbox.org`, `projects.org`,
 `areas.org` and `someday.org`.  `org-agenda-files` is the listed files,
-in order, then the calendar directory; the Dashboard's "Inbox (process
+in order, less the someday files (`someday.org`, `cetos-someday.org`),
+then the calendar directory; the Dashboard's "Inbox (process
 me)" view reads every listed inbox, `inbox.org` and `cetos-inbox.org`;
 capture's `i` and `N` go to `inbox.org` where it is listed and
 otherwise to `cetos-inbox.org`; and where both are listed, `c`
 captures into `cetos-inbox.org`.  The list is read once, as org,
 org-agenda and org-capture load, so a changed list takes effect at the
-next start.  Refiling offers every agenda file.  The smoke test points
+next start.  Refiling offers every agenda file and
+the someday files, which no agenda view, search or `.ics` export
+reads.  The smoke test points
 the list at a file that never exists, so it always sees the personal
 four.  ERT tests: `test/rjd-org-files-test.el`.
 

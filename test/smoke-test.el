@@ -183,13 +183,17 @@ A value saved in custom.el would win over init.el's `:custom'."
                  '("~/org-agenda/inbox.org"
                    "~/org-agenda/projects.org"
                    "~/org-agenda/areas.org"
-                   "~/org-agenda/someday.org"
                    "~/org-agenda/calendars/"))))
 
 (ert-deftest rjd/smoke-refiling-offers-every-agenda-file ()
-  "Refiling offers every agenda file, whichever org-sync's list names."
+  "Refiling offers every agenda file and the someday files, whatever the list.
+someday.org is not an agenda file, but is refiled to all the same."
   (require 'org)
-  (should (equal org-refile-targets '((org-agenda-files :maxlevel . 3)))))
+  (should (equal org-refile-targets
+                 '((org-agenda-files :maxlevel . 3)
+                   (rjd/org-files-someday-files :maxlevel . 3))))
+  (should (equal (rjd/org-files-someday-files)
+                 '("~/org-agenda/someday.org"))))
 
 (ert-deftest rjd/smoke-inbox-view-reads-the-inbox ()
   "The dashboard's inbox view reads inbox.org, without org-sync's list."

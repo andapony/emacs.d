@@ -666,6 +666,11 @@ traversing corrupts its iteration."
   ;; list, and rjd-org-files in user-lisp/ reads it, once, as org loads,
   ;; so a changed list takes effect at the next start.
   ;;
+  ;; Less the someday files, someday.org and cetos-someday.org: their
+  ;; entries are ideas, not commitments, so no agenda view shows them,
+  ;; nor does search or the .ics export.  `org-refile-targets' below
+  ;; offers them all the same.
+  ;;
   ;; The last entry is `rjd/calendar-directory', every .org file in it:
   ;; the calendars, such as Google's, fetched by rjd-gcal (see
   ;; ";;; Calendar" below).
@@ -679,7 +684,9 @@ traversing corrupts its iteration."
   (org-log-done 'time)
   (org-log-into-drawer t)
   (org-pretty-entities t)
-  (org-refile-targets '((org-agenda-files :maxlevel . 3)))
+  ;; Every agenda file, and the someday files the agenda leaves out.
+  (org-refile-targets '((org-agenda-files :maxlevel . 3)
+                        (rjd/org-files-someday-files :maxlevel . 3)))
   ;; Offer the whole outline path as a single candidate instead of
   ;; descending one level at a time.  The stepwise default suits setups
   ;; without a completion UI; with candidates filtered as you type, the

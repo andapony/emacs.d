@@ -2,8 +2,8 @@
 
 ;;; Commentary:
 
-;; Which files the agenda, its inbox view and capture use, for each
-;; list a machine might have: every file, the Cetos four only, the
+;; Which files the agenda, its inbox view, capture and refiling use,
+;; for each list a machine might have: every file, the Cetos four only, the
 ;; personal four, and no list at all.  Every list is a temporary file,
 ;; never ~/.config/org-sync/files, and nothing is read from or written
 ;; to ~/org-agenda.
@@ -54,13 +54,18 @@ cetos-inbox.org\ncetos-projects.org\ncetos-areas.org\ncetos-someday.org\n"
 ;;; Every file
 
 (ert-deftest rjd/org-files-all-eight ()
-  "With every file listed, the agenda reads all eight, in the list's order."
+  "With every file listed, the agenda reads all but the someday files.
+They are in the list's order, and the two someday files are offered
+for refiling instead."
   (rjd/org-files-test-with-list rjd/org-files-test-all
     (should (equal (rjd/org-files-agenda-files)
                    (rjd/org-files-test-paths
-                    "inbox.org" "projects.org" "areas.org" "someday.org"
+                    "inbox.org" "projects.org" "areas.org"
                     "cetos-inbox.org" "cetos-projects.org"
-                    "cetos-areas.org" "cetos-someday.org")))
+                    "cetos-areas.org")))
+    (should (equal (rjd/org-files-someday-files)
+                   (rjd/org-files-test-paths
+                    "someday.org" "cetos-someday.org")))
     (should (equal (rjd/org-files-inboxes)
                    (rjd/org-files-test-paths "inbox.org" "cetos-inbox.org")))))
 
@@ -83,7 +88,9 @@ name is not part of it."
     (should (equal (rjd/org-files-agenda-files)
                    (rjd/org-files-test-paths
                     "cetos-inbox.org" "cetos-projects.org"
-                    "cetos-areas.org" "cetos-someday.org")))
+                    "cetos-areas.org")))
+    (should (equal (rjd/org-files-someday-files)
+                   (rjd/org-files-test-paths "cetos-someday.org")))
     (should (equal (rjd/org-files-inboxes)
                    (rjd/org-files-test-paths "cetos-inbox.org")))))
 
@@ -98,11 +105,13 @@ name is not part of it."
 ;;; The personal four
 
 (ert-deftest rjd/org-files-personal-four ()
-  "With the personal four listed, the agenda is as it always was."
+  "With the personal four listed, the agenda reads three; someday.org is refiled to."
   (rjd/org-files-test-with-list rjd/org-files-test-personal
     (should (equal (rjd/org-files-agenda-files)
                    (rjd/org-files-test-paths
-                    "inbox.org" "projects.org" "areas.org" "someday.org")))
+                    "inbox.org" "projects.org" "areas.org")))
+    (should (equal (rjd/org-files-someday-files)
+                   (rjd/org-files-test-paths "someday.org")))
     (should (equal (rjd/org-files-inboxes)
                    (rjd/org-files-test-paths "inbox.org")))))
 
@@ -116,12 +125,15 @@ name is not part of it."
 ;;; No list
 
 (ert-deftest rjd/org-files-no-list ()
-  "Without a list, the agenda is the personal four, in today's order."
+  "Without a list, the agenda is the personal four less someday.org.
+someday.org is offered for refiling instead."
   (rjd/org-files-test-with-list nil
     (should-not (file-exists-p rjd/org-files-list-file))
     (should (equal (rjd/org-files-agenda-files)
                    (rjd/org-files-test-paths
-                    "inbox.org" "projects.org" "areas.org" "someday.org")))
+                    "inbox.org" "projects.org" "areas.org")))
+    (should (equal (rjd/org-files-someday-files)
+                   (rjd/org-files-test-paths "someday.org")))
     (should (equal (rjd/org-files-inboxes)
                    (rjd/org-files-test-paths "inbox.org")))))
 
@@ -152,5 +164,12 @@ name is not part of it."
     (should-not (rjd/org-files-inboxes))
     (should (equal (rjd/org-files-capture-inbox) "~/org-agenda/inbox.org"))
     (should-not (rjd/org-files-cetos-inbox))))
+
+(ert-deftest rjd/org-files-no-someday-listed ()
+  "A list naming no someday file has none to refile to."
+  (rjd/org-files-test-with-list "inbox.org\nprojects.org\n"
+    (should-not (rjd/org-files-someday-files))
+    (should (equal (rjd/org-files-agenda-files)
+                   (rjd/org-files-test-paths "inbox.org" "projects.org")))))
 
 ;;; rjd-org-files-test.el ends here
